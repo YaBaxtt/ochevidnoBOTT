@@ -1,0 +1,70 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { PGlite } from '@electric-sql/pglite';
+import { PostgresAppStore } from '../src/app-store.js';
+import { processDelivery } from '../src/broadcast.js';
+import { makeResult } from '../src/card-engine.js';
+import { processOwnerAlert } from '../src/release-api.js';
+
+test('PostgreSQL schema, bonus ledger, ad queue and delivery SQL work together',async()=>{
+  const db=new PGlite();
+  const store=new PostgresAppStore('postgres://localhost/verification');
+  await store.pool.end();
+  const query=async(sql,values=[])=>{
+    if(!values.length){const results=await db.exec(sql);const last=results.at(-1)||{rows:[]};return {...last,rowCount:last.rows.length||last.affectedRows||0};}
+    const result=await db.query(sql,values);return {...result,rowCount:result.rows.length||result.affectedRows||0};
+  };
+  store.pool={query,connect:async()=>({query,release(){}}),end:()=>db.close()};
+  try {
+    await store.init();
+    await store.upsertUser({id:1,first_name:'Тест'});
+    await store.upsertUser({id:2,first_name:'Без сообщений'});
+    await store.setNotifications(1,true,true);
+    await store.query('UPDATE users SET lumens=10 WHERE telegram_id=$1',[1]);
+    const purchase=await store.createPurchase({userId:1,cardId:'sum-two',amount:5,answers:{a:1,b:1},result:{headline:'2'}});
+    assert.equal((await store.payWithBonuses(purchase.id,1)).paymentMethod,'bonus');
+    await store.payWithBonuses(purchase.id,1);
+    assert.equal((await store.getProfile(1)).bonusBalance,5);
+    assert.equal((await store.getProfile(1)).cardCount,1);
+    assert.equal((await store.dashboard()).grossStars,0);
+    assert.equal((await store.recentPurchases(1))[0].title,'Сложи два числа');
+    const ad=await store.createCampaign({kind:'entry',title:'Новое',body:'Текст',buttonText:'',buttonUrl:'',audience:'all',limitCount:null});
+    await store.updateEntryCampaign(ad.id,true);
+    assert.equal((await store.getEntryCampaign(1)).id,ad.id);
+    await store.recordAdEvent(ad.id,1);await store.recordAdEvent(ad.id,1,true);
+    assert.equal(await store.getEntryCampaign(1),null);
+    const campaign=await store.createCampaign({kind:'broadcast',title:'Обновление',body:'Текст',buttonText:'Открыть',buttonUrl:'https://t.me/example',audience:'limit',limitCount:1});
+    assert.equal((await store.queueCampaign(campaign.id)).total,1);
+    await assert.rejects(()=>store.queueCampaign(campaign.id),/уже запускалась/);
+    const sent=[];await processDelivery({store,telegram:{sendMessage:async(id)=>sent.push(id)}});
+    assert.deepEqual(sent,['1']);
+    const rows=await store.listCampaigns();
+    assert.equal(rows.find((r)=>r.id===campaign.id).sent,1);
+    assert.equal(rows.find((r)=>r.id===campaign.id).status,'completed');
+    assert.equal(rows.find((r)=>r.id===ad.id).clicks,1);
+    await store.updateBotSettings({welcome:'Привет, {name}!',buttonText:'Вперёд'});
+    assert.equal((await store.getBotSettings()).welcome,'Привет, {name}!');
+    await store.recordStart(1);await store.recordStart(1);await store.recordView('rest-license',1);await store.recordView('rest-license',1);
+    const promo=await store.createPromo({code:'PGCARD',kind:'card',cardId:'bundle-office',bonus:0,usageLimit:1,expiresAt:null});
+    await store.redeemPromo('PGCARD',1);await assert.rejects(()=>store.redeemPromo('PGCARD',2),/Промокод/);
+    assert.equal((await store.getVouchers(1))[0].quantity,1);
+    const bundle=await store.createPurchase({userId:1,cardId:'bundle-office',amount:35,answers:{name:'Тест'},result:makeResult('bundle-office',{name:'Тест'})});
+    await store.payWithVoucher(bundle.id,1);await store.payWithVoucher(bundle.id,1);
+    assert.equal((await store.getProfile(1)).cardCount,4);assert.equal((await store.getVouchers(1)).length,0);
+    const bpromo=await store.createPromo({code:'PGBONUS',kind:'bonus',cardId:null,bonus:15,usageLimit:2,expiresAt:null});
+    await store.redeemPromo('PGBONUS',2);assert.equal((await store.getProfile(2)).bonusBalance,15);await store.togglePromo(bpromo.id,false);assert.equal((await store.listPromos()).find(p=>p.id===bpromo.id).active,false);
+    await store.updateSalesSettings({paused:true});assert.equal((await store.getSalesSettings()).paused,true);
+    const adSource=await store.createPlacement({title:'Тест размещения',cost:500,currency:'RUB'});await store.attributeUser(1,adSource.token);
+    const actual=await store.createPurchase({userId:1,cardId:'rest-license',amount:20,answers:{name:'Тест'},result:makeResult('rest-license',{name:'Тест'})});
+    await store.settlePurchase({payload:actual.payload,chargeId:'pg-payment'});
+    const interest={kind:'broadcast',title:'Грамоты',body:'Тест',buttonText:'',buttonUrl:'',audience:'all',interest:'documents'};
+    assert.equal(await store.campaignAudience(interest),1);const segment=await store.createCampaign(interest);assert.equal((await store.queueCampaign(segment.id)).total,1);
+    await store.markRefunded(actual.id);
+    const report=await store.releaseReport();assert.equal(report.starts,2);assert.equal(report.uniqueStarts,1);assert.equal(report.receivedStars,20);assert.equal(report.refundedStars,20);assert.equal(report.netStars,0);assert.equal(report.bonusVolume,5);assert.equal(report.products.find(p=>p.id==='rest-license').views,1);
+    const placement=(await store.placementReport())[0];assert.equal(placement.users,1);assert.equal(Number(placement.receivedStars),20);assert.equal(Number(placement.refundedStars),20);
+    store.ownerIds=new Set(['2']);await store.createTicket({userId:1,message:'SQL: проверьте оплату'});assert.equal((await store.ownTickets(2)).length,0);assert.equal((await store.ownTickets(1)).length,1);
+    const alerts=[];await processOwnerAlert({store,telegram:{sendMessage:async(id,text)=>alerts.push({id,text})}});assert.equal(alerts[0].id,'2');assert.match(alerts[0].text,/SQL/);
+    const problems=await store.listProblems();await store.resolveProblem(problems[0].id);assert.equal((await store.listProblems())[0].state,'resolved');
+    await store.init();assert.equal((await store.listPromos()).find(p=>p.id===promo.id).used,1);
+  }finally{await db.close();}
+});
