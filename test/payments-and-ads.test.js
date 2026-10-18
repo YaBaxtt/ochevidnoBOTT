@@ -39,7 +39,7 @@ test('public app info helps browser visitors open Telegram without disclosing ru
     assert.doesNotMatch(JSON.stringify(result.body), /test-token|DATABASE|adminIds/);
     const html = await fetch(f.base + '/');
     assert.equal(html.headers.get('cache-control'), 'no-cache');
-    assert.match(await html.text(), /app\.js\?v=7/);
+    assert.match(await html.text(), /app\.js\?v=8/);
     const avatar = await fetch(f.base + result.body.avatarUrl);
     assert.equal(avatar.status, 200);
     assert.match(avatar.headers.get('content-type'), /image\/jpeg/);

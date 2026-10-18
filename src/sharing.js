@@ -26,7 +26,7 @@ export function shareEntry(purchase,profile,{itemIndex=null,botUsername=''}={}) 
 function mediaToken(config,purchase,userId,itemIndex){
   // Stable within six hours for efficient Telegram caching; no sequential/public collection URLs.
   const expiresAt=(Math.floor(Date.now()/21600000)+9)*21600000;
-  const value=Buffer.from(JSON.stringify({purchaseId:purchase.id,userId:String(userId),itemIndex,expiresAt})).toString('base64url');
+  const value=Buffer.from(JSON.stringify({purchaseId:purchase.id,userId:String(userId),itemIndex,expiresAt,visualVersion:2})).toString('base64url');
   return `${value}.${crypto.createHmac('sha256',keyFor(config)).update(value).digest('base64url')}`;
 }
 export function sharePhoto(config,purchase,profile,itemIndex=null){

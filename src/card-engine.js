@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { normaliseRecipient } from '../public/visual-utils.js';
 
 const today = () => new Date();
 
@@ -155,6 +156,7 @@ export function getCardDefinition(cardId) {
 
 export function makeResult(cardId, answers = {}, now = today()) {
   const definition = getCardDefinition(cardId);
+  if(definition?.kind==='certificate'&&answers.name)answers={...answers,name:normaliseRecipient(text(answers.name,'имя',40))};
   if (definition?.bundleItems) {
     const items = definition.bundleItems.map((id) => ({ cardId: id, title: getCardDefinition(id).title, result: makeResult(id, answers, now) }));
     return { kind: 'bundle', headline: `${items.length} документа в коллекции`, detail: 'Каждый можно открыть и скачать отдельно.', badge: 'КОМПЛЕКТ ВЫДАН', items };

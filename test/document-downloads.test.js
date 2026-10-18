@@ -41,7 +41,8 @@ test('owned certificate download uses a short-lived server file, escaped SVG and
     assert.equal(file.status,200);assert.match(file.headers.get('content-type'),/image\/svg\+xml/);
     assert.equal(file.headers.get('content-disposition'),`attachment; filename="${issued.body.fileName}"`);
     assert.equal(file.headers.get('access-control-allow-origin'),'https://web.telegram.org');assert.match(file.headers.get('cache-control'),/no-store/);
-    assert.match(svg,/^<\?xml/);assert.match(svg,/width="800" height="1100"/);assert.match(svg,/&lt;Проверка &amp; имя&gt;/);assert.doesNotMatch(svg,/<Проверка/);
+    assert.match(svg,/^<\?xml/);assert.match(svg,/width="800" height="1100"/);assert.match(svg,/&lt;Проверка &amp; Имя&gt;/);assert.doesNotMatch(svg,/<Проверка/);
+    assert.match(svg,/@font-face/);assert.match(svg,/data:font\/ttf;base64,/);assert.match(file.headers.get('content-security-policy'),/font-src data:/);
     const head=await fetch(f.base+issued.body.path,{method:'HEAD'});assert.equal(head.status,200);assert.equal(await head.text(),'');
     const replacement=issued.body.path.at(-1)==='A'?'B':'A';
     assert.equal((await fetch(f.base+issued.body.path.slice(0,-1)+replacement)).status,403);

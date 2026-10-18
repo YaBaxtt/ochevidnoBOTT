@@ -93,7 +93,7 @@ test('interest broadcasts select paid categories only and still respect opt-out'
 });
 
 test('certificates escape user text; Telegram auth rejects duplicate fields and negative IDs',()=>{
-  const r=makeResult('rest-license',{name:'<script>alert(1)</script>'});const svg=certificateSvg(r);assert.doesNotMatch(svg,/<script>/);assert.match(svg,/&lt;script&gt;/);assert.match(svg,/ШУТОЧНЫЙ ДОКУМЕНТ/);
+  const r=makeResult('rest-license',{name:'<script>alert(1)</script>'});const svg=certificateSvg(r);assert.doesNotMatch(svg,/<script>/i);assert.match(svg,/&lt;Script&gt;/);assert.match(svg,/ШУТОЧНЫЙ ДОКУМЕНТ/);
   assert.throws(()=>validateTelegramInitData(sign(-1),'test-token'));
   assert.throws(()=>validateTelegramInitData(sign(1)+'&user=forged','test-token'),/Повторяющиеся/);
   assert.equal(DEFAULT_CARDS.filter(c=>c.premium&&c.kind==='certificate').length,5);

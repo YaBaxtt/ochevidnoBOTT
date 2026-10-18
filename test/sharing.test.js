@@ -38,7 +38,7 @@ async function fixture(){
 test('photo templates render real JPEGs with bundled Cyrillic fonts; premium and bundle designs are distinct',async()=>{
   const regular=certificateSvg(certificateSample()),premium=certificateSvg(certificateSample('premium')),bundle=certificateSvg(certificateSample('bundle'));
   assert.notEqual(regular,premium);assert.notEqual(bundle,premium);assert.notEqual(bundle,regular);
-  assert.match(premium,/PRIVATE EDITION/);assert.match(premium,/#d5b775/);assert.match(regular,/Фамилия Имя/);
+  assert.match(premium,/ЧАСТНАЯ КОЛЛЕКЦИЯ/);assert.match(premium,/#ad853e/);assert.match(regular,/Фамилия Имя/);assert.match(premium,/Marck Script/);
   const svg=resultCardSvg({result:sampleResult,card:sampleResultCard,firstName:'<script>Имя & текст</script>',botUsername:'obvious_test_bot'});
   assert.doesNotMatch(svg,/<script>/);assert.match(svg,/&lt;script&gt;/);
   for(const source of [svg,regular,premium,bundle]){
@@ -65,6 +65,7 @@ test('share prepare is owner-only and produces a photo message with a real bot b
 test('photo capabilities reject tampering and refunds; downloads and thumbnails return JPEG without exposing a collection',async()=>{
   const f=await fixture();try{
     const minted=(await f.request(`/api/purchases/${f.purchase.id}/share-image`)).body;
+    const payload=JSON.parse(Buffer.from(minted.path.split('/').at(-1).split('.')[0],'base64url').toString('utf8'));assert.equal(payload.visualVersion,2);
     const file=await fetch(f.base+minted.path),buffer=Buffer.from(await file.arrayBuffer());assert.equal(file.status,200);assert.match(file.headers.get('content-type'),/image\/jpeg/);assert.equal((await sharp(buffer).metadata()).width,1200);
     const thumb=await fetch(f.base+minted.path+'?size=thumb');assert.equal((await sharp(Buffer.from(await thumb.arrayBuffer())).metadata()).width,320);
     const downloaded=await fetch(f.base+minted.path+'?download=1');assert.equal(downloaded.headers.get('content-disposition'),`attachment; filename="${minted.fileName}"`);

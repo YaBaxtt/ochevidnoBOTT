@@ -1,4 +1,4 @@
-export {certificateSvg,sampleCertificate,certificateSample} from './certificate-design.js';
+export {certificateSvg,sampleCertificate,certificateSample,recipientPreview} from './certificate-design.js?v=2';
 
 export function downloadCertificate({url,fileName,telegram,onStatus=()=>{}}) {
   if(telegram?.initData) {

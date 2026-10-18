@@ -1,9 +1,15 @@
 import crypto from 'node:crypto';
+import {readFile} from 'node:fs/promises';
 import { rateLimit } from 'express-rate-limit';
 import { certificateSvg } from '../public/certificate.js';
 
 const uuidPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const lifetimeMs=5*60*1000;
+let fontStyle;
+async function standaloneSvg(svg) {
+  fontStyle??=readFile(new URL('../public/assets/fonts/MarckScript-Regular.ttf',import.meta.url)).then(buffer=>`<style>@font-face{font-family:'Marck Script';src:url(data:font/ttf;base64,${buffer.toString('base64')}) format('truetype');font-weight:400;font-style:normal}</style>`);
+  return svg.replace('<defs>',`${await fontStyle}<defs>`);
+}
 
 function ownedDocument(purchase,itemIndex=null) {
   if(!purchase||purchase.state!=='paid')throw new Error('Документ недоступен. Откройте выданную грамоту в своей коллекции.');
@@ -48,8 +54,8 @@ export function registerDocumentDownloads({app,store,config,getTelegram,requireA
     res.type('image/svg+xml').set('Content-Disposition',`attachment; filename="${fileName}"`)
       .set('Access-Control-Allow-Origin','https://web.telegram.org')
       .set('Cross-Origin-Resource-Policy','cross-origin')
-      .set('Content-Security-Policy',"default-src 'none'; sandbox")
-      .send(svg);
+      .set('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; font-src data:; sandbox")
+      .send(await standaloneSvg(svg));
   });
   app.post('/api/purchases/:purchaseId/document-send',requireActor,sendLimited,async(req,res)=>{
     const purchase=await store.getPurchase(req.params.purchaseId,req.actor.id);
@@ -57,7 +63,7 @@ export function registerDocumentDownloads({app,store,config,getTelegram,requireA
     const {fileName,svg,title}=ownedDocument(purchase,req.body?.itemIndex??null),telegram=getTelegram();
     if(config.demo||!telegram)return res.status(409).json({error:'В демо отправка в Telegram недоступна. Используйте скачивание в браузере.'});
     try {
-      await telegram.sendDocument(req.actor.id,{source:Buffer.from(svg,'utf8'),filename:fileName},{caption:`Очевидно · ${title}\n\nТвоя грамота в SVG: сохрани файл из этого сообщения. Шуточный документ.`});
+      await telegram.sendDocument(req.actor.id,{source:Buffer.from(await standaloneSvg(svg),'utf8'),filename:fileName},{caption:`Очевидно · ${title}\n\nТвоя грамота в SVG: сохрани файл из этого сообщения. Шуточный документ.`});
       res.json({sent:true});
     }catch(error){
       if([400,403].includes(error.response?.error_code))return res.status(409).json({error:'Откройте личный чат с ботом, нажмите /start и разрешите сообщения, затем повторите отправку.'});

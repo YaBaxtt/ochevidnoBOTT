@@ -3,7 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const fonts=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../public/assets/fonts');
-const fontFiles=['PT_Sans-Web-Regular.ttf','PT_Sans-Web-Bold.ttf','PT_Serif-Web-Regular.ttf','PT_Serif-Web-Italic.ttf'].map(name=>path.join(fonts,name));
+const fontFiles=['PT_Sans-Web-Regular.ttf','PT_Sans-Web-Bold.ttf','PT_Serif-Web-Regular.ttf','PT_Serif-Web-Italic.ttf','MarckScript-Regular.ttf'].map(name=>path.join(fonts,name));
 const cache=new Map(),inflight=new Map(),waiters=[];
 let active=0,cacheBytes=0;
 async function acquire() {

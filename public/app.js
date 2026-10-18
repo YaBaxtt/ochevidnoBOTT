@@ -1,6 +1,7 @@
 import { icon, cardIcons } from './icons.js';
 import { adminPage, loadAdmin, adminClick, adminSubmit, filterReports } from './admin.js?v=6';
-import { certificateSvg, downloadCertificate, certificateSample } from './certificate.js?v=4';
+import { certificateSvg, downloadCertificate, certificateSample, recipientPreview } from './certificate.js?v=5';
+import { normaliseRecipient } from './visual-utils.js?v=2';
 import { resultCardSvg, sampleResult, sampleResultCard } from './result-visuals.js?v=1';
 import { artImage, artworkSlug } from './art.js?v=3';
 import { BRAND } from './brand.js?v=2';
@@ -12,6 +13,8 @@ const telegram = window.Telegram?.WebApp;
 const requestedTab = new URLSearchParams(location.search).get('tab') || new URLSearchParams(telegram?.initData || '').get('start_param');
 const state = { view: ['home','profile','tasks','top','collection','premium','bundles','admin'].includes(requestedTab) ? requestedTab : 'home', data: null, category:'all', search:'', adminTab:'overview', wallet:null, balance:null, walletError:'' };
 let displayedDocument;
+let displayedAward;
+let awardZoom=1;
 let modalOpener;
 try { document.body.classList.toggle('reduce-motion',localStorage.getItem('obvious.reduce-motion')==='1'); } catch {}
 let tonUI;
@@ -112,13 +115,26 @@ function openCard(id,flashlightConfirm=false) {
   const card=state.data.cards.find((c)=>c.id===id); if(!card) return toast('Карточка сейчас недоступна.',true);
   if(id==='flashlight'&&!flashlightConfirm) return openFlashlight(card);
   api(`/api/cards/${id}/view`,{method:'POST',body:'{}'}).catch(()=>{});
-  const fields=card.fields.map((f)=>`<label>${esc(f.label)}<input name="${esc(f.key)}" type="${f.type==='number'?'number':'text'}" ${f.type==='number'?'step="any"':''} ${f.min!==undefined?`min="${f.min}"`:''} ${f.max!==undefined?`max="${f.max}"`:''} ${f.maxLength?`maxlength="${f.maxLength}"`:''} placeholder="${esc(f.placeholder||'')}" required></label>`).join('');
+  const fields=card.fields.map((f)=>`<label>${esc(f.label)}<input name="${esc(f.key)}" type="${f.type==='number'?'number':'text'}" ${f.key==='name'?'autocomplete="name" autocapitalize="words" spellcheck="false"':''} ${f.type==='number'?'step="any"':''} ${f.min!==undefined?`min="${f.min}"`:''} ${f.max!==undefined?`max="${f.max}"`:''} ${f.maxLength?`maxlength="${f.maxLength}"`:''} placeholder="${esc(f.placeholder||'')}" required></label>`).join('');
   const bonusAvailable=state.data.profile.bonusBalance>=card.priceStars;
   const voucher=state.data.vouchers?.find(v=>v.cardId===id&&v.quantity>0);
   const freeOpenings=state.data.freeOpenings||0;
   const bundle=card.bundleItems?.length?`<div class="bundle-contents"><small>В НАБОРЕ · ${card.bundleItems.length} ДОКУМЕНТА</small>${card.bundleItems.map(i=>`<span>${icon('document')}${esc(state.data.cards.find(c=>c.id===i)?.title||i)}</span>`).join('')}</div>`:'';
   showModal(`<div class="checkout-visual">${artImage(artworkSlug(id),{eager:true,sizes:'180px'})}</div><span class="eyebrow">${esc(card.category)}</span><h2>${esc(card.title)}</h2><p>${esc(card.subtitle)}</p><div class="checkout-price">${stars(card.priceStars)}<small>ОБЫЧНАЯ ЦЕНА · TELEGRAM STARS</small></div>${bundle}<button class="sample-link" data-sample-card="${id}">Посмотреть образец ↗</button><form class="form" id="card-form" data-id="${id}" data-request-id="${crypto.randomUUID()}">${fields}<div class="payment-options">${freeOpenings?`<label class="free-payment-option"><input type="radio" name="paymentMethod" value="free" checked><span>Бесплатное открытие<small>Осталось: ${fmt(freeOpenings)} · потратится 1</small></span><b>Без Stars</b></label>`:''}${voucher?`<label><input type="radio" name="paymentMethod" value="voucher" ${freeOpenings?'':'checked'}><span>По промокоду<small>Доступно: ${voucher.quantity}</small></span><b>Бесплатно</b></label>`:''}<label><input type="radio" name="paymentMethod" value="stars" ${voucher||freeOpenings?'':'checked'}><span>Telegram Stars</span>${stars(card.priceStars)}</label><label class="${bonusAvailable?'':'unavailable'}"><input type="radio" name="paymentMethod" value="bonus" ${bonusAvailable?'':'disabled'}><span>Бонусами<small>На счёте: ${state.data.profile.bonusBalance}</small></span><b>${card.priceStars}</b></label></div>${agreement()}<button class="primary full" type="submit" ${state.data.sales?.paused?'disabled':''}></button></form><div class="payment-note" id="checkout-note"></div>`);
   updateCheckoutMethod();
+  if(card.fields.some(field=>field.key==='name')&&['certificate','bundle'].includes(card.kind)) {
+    const preview=document.createElement('details');preview.id='recipient-preview';preview.className='recipient-preview';
+    preview.innerHTML='<summary>Проверить имя на грамоте <span id="recipient-preview-name"></span></summary><p>Только образец оформления. Персональный результат по-прежнему открывается после покупки.</p><div id="recipient-preview-document" class="certificate-wrap"></div>';
+    document.querySelector('#card-form .payment-options').before(preview);
+    updateRecipientPreview();
+  }
+}
+function updateRecipientPreview() {
+  const details=document.querySelector('#recipient-preview'),form=document.querySelector('#card-form');if(!details||!form)return;
+  const input=form.querySelector('[name="name"]'),card=state.data.cards.find(c=>c.id===form.dataset.id);
+  const recipient=normaliseRecipient(input?.value)||'Фамилия Имя';
+  details.querySelector('#recipient-preview-name').textContent=recipient;
+  if(details.open)details.querySelector('#recipient-preview-document').innerHTML=certificateSvg(recipientPreview(card,recipient,state.data.botUsername),true);
 }
 function updateCheckoutMethod() {
   const form=document.querySelector('#card-form');if(!form)return;
@@ -147,12 +163,34 @@ function showResult(p,itemIndex=null) {
   if(p.state!=='paid'||!p.result)return verifyPayment(p.id,true);const r=p.result;
   displayedDocument=r.kind==='certificate'?{purchaseId:p.id,itemIndex}:null;
   const presented={...r,botUsername:state.data.botUsername,collectionStyle:r.rank==='Частная коллекция'?'premium':itemIndex!==null?'bundle':'standard'};
+  displayedAward=r.kind==='certificate'?presented:null;
   const result=r.kind==='certificate'
-    ? `<div class="certificate-wrap">${certificateSvg(presented)}</div><button class="secondary full spaced" data-action="download-certificate">Скачать грамоту · SVG ${icon('arrow')}</button>${!isDemo()?`<button class="text-button full" data-send-document="${p.id}" data-item-index="${itemIndex??''}">Получить файлом в боте</button>`:''}<p class="muted-note">SVG — для печати. JPEG — чтобы сохранить на телефон или отправить другу.</p>`
+    ? `<button class="certificate-wrap certificate-zoom" data-action="zoom-certificate" aria-label="Увеличить грамоту">${certificateSvg(presented)}<span>Увеличить ↗</span></button><button class="secondary full spaced" data-action="download-certificate">Скачать грамоту · SVG ${icon('arrow')}</button>${!isDemo()?`<button class="text-button full" data-send-document="${p.id}" data-item-index="${itemIndex??''}">Получить файлом в боте</button>`:''}<p class="muted-note">SVG — для печати. JPEG — чтобы сохранить на телефон или отправить другу.</p>`
     : r.kind==='bundle'
       ? `<div class="bundle-issued"><span class="eyebrow">КОМПЛЕКТ ВЫДАН</span><h2>${esc(r.headline)}</h2><p>${esc(r.detail)}</p>${r.items.map((item,i)=>`<button class="collection-row" data-bundle-purchase="${p.id}" data-bundle-index="${i}"><span class="collection-icon">${icon('document')}</span><span><b>${esc(item.title)}</b><small>Именной документ · открыть и скачать</small></span>${icon('chevron')}</button>`).join('')}</div>`
       : `<div class="result-image-wrap">${resultCardSvg({result:r,card:state.data.cards.find(card=>card.id===p.cardId),firstName:state.data.profile.firstName,botUsername:state.data.botUsername})}</div>`;
   showModal(`<div class="reveal-shell"><div class="reveal-curtain"><img src="${BRAND.smallAvatar}" alt=""><span>${r.kind==='certificate'?'ДОКУМЕНТ ЗАВЕРЕН':'ОЧЕВИДНО. ГОТОВО.'}</span><i></i></div><div class="reveal-content">${result}<div class="result-actions"><button class="secondary" data-view="collection">В коллекцию</button><button class="primary" data-share="${p.id}" data-share-index="${itemIndex??''}">Отправить фото ${icon('arrow')}</button></div><button class="text-button full" data-download-share="${p.id}" data-share-index="${itemIndex??''}">Сохранить картинкой · JPEG</button>${p.paymentMethod==='free'?'<p class="muted-note">Бесплатное открытие · Stars не списаны</p>':''}<p class="purchase-id">Заказ: ${esc(p.id)}</p></div></div>`);if(telegram?.isVersionAtLeast?.('6.1'))telegram.HapticFeedback?.notificationOccurred?.('success');
+}
+function zoomCertificate() {
+  if(!displayedAward||!displayedDocument)return;
+  awardZoom=1;
+  showModal(`<div class="award-viewer-heading"><span class="eyebrow">ГРАМОТА · КРУПНЫМ ПЛАНОМ</span><button class="text-button" data-action="back-certificate">← К результату</button></div><div class="award-zoom-tools"><button class="secondary" data-award-zoom="out" aria-label="Уменьшить">−</button><span id="award-zoom-value" aria-live="polite">100%</span><button class="secondary" data-award-zoom="in" aria-label="Увеличить">+</button></div><div class="award-stage"><div id="award-stage-content">${certificateSvg(displayedAward)}</div></div><p class="muted-note">Увеличивай кнопками и прокручивай документ. Это вектор: буквы остаются чёткими.</p>`);
+  modalRoot.querySelector('.sheet').classList.add('award-viewer');
+}
+async function backToCertificate() {
+  if(!displayedDocument)return;
+  const {purchaseId,itemIndex}=displayedDocument,{purchase}=await api(`/api/purchases/${purchaseId}`);
+  if(itemIndex!==null&&purchase.result?.items?.[itemIndex]){
+    const item=purchase.result.items[itemIndex];return showResult({...purchase,cardId:item.cardId,result:item.result},itemIndex);
+  }
+  return showResult(purchase);
+}
+function changeAwardZoom(direction) {
+  const stage=document.querySelector('.award-stage'),content=document.querySelector('#award-stage-content');if(!stage||!content)return;
+  const previous=awardZoom;awardZoom=Math.max(1,Math.min(3,awardZoom+(direction==='in'?0.5:-0.5)));
+  const ratio=awardZoom/previous,left=(stage.scrollLeft+stage.clientWidth/2)*ratio-stage.clientWidth/2,top=(stage.scrollTop+stage.clientHeight/2)*ratio-stage.clientHeight/2;
+  content.style.width=`${awardZoom*100}%`;stage.scrollLeft=left;stage.scrollTop=top;
+  document.querySelector('#award-zoom-value').textContent=`${Math.round(awardZoom*100)}%`;
 }
 async function saveDocument(target) {
   const document={...displayedDocument};if(!document.purchaseId)return;
@@ -239,6 +277,7 @@ document.addEventListener('click',async(event)=>{
     if(t.dataset.inlineShare!==undefined){if(telegram?.switchInlineQuery&&telegram.isVersionAtLeast?.('6.7'))return telegram.switchInlineQuery(t.dataset.inlineShare,['users','groups','channels']);return toast(`Введи @${state.data.botUsername||'obviously_bbot'} и пробел в любом чате.`);}
     if(t.dataset.sendShare)return await sendShareImage(t);
     if(t.dataset.downloadShare)return await downloadShareImage(t);
+    if(t.dataset.awardZoom)return changeAwardZoom(t.dataset.awardZoom);
     if(t.dataset.bundlePurchase){const {purchase}=await api(`/api/purchases/${t.dataset.bundlePurchase}`);const item=purchase.result?.items?.[Number(t.dataset.bundleIndex)];if(item)return showResult({...purchase,cardId:item.cardId,result:item.result},Number(t.dataset.bundleIndex));return;}
     if(t.dataset.sendDocument)return await sendDocument(t);
     if(t.dataset.favorite){const id=t.dataset.favorite;favorites.has(id)?favorites.delete(id):favorites.add(id);localStorage.setItem('obvious.favorites',JSON.stringify([...favorites]));return render();}
@@ -253,6 +292,7 @@ document.addEventListener('click',async(event)=>{
     const a=t.dataset.action;
     if(a==='close')return closeModal();if(a==='retry')return load();if(a==='terms')return showTerms();if(a==='support')return openSupport();
     if(a==='sample')return showSample();if(a==='promo')return openPromo();if(a==='download-certificate'&&displayedDocument)return await saveDocument(t);
+    if(a==='zoom-certificate')return zoomCertificate();if(a==='back-certificate')return await backToCertificate();
     if(a==='inline-collection')return inlineCollection();
     if(a==='motion'){document.body.classList.toggle('reduce-motion');localStorage.setItem('obvious.reduce-motion',document.body.classList.contains('reduce-motion')?'1':'0');return render();}
     if(a==='my-tickets'){const {tickets}=await api('/api/support/mine');return showModal(`<h2>Мои обращения</h2><div class="admin-list">${tickets.length?tickets.map(r=>`<article class="admin-card"><h3>№${esc(r.id.slice(0,8))} · ${r.state==='resolved'?'Решено':'В работе'}</h3><p>${esc(r.message)}</p></article>`).join(''):'<p>Обращений пока нет.</p>'}</div><button class="primary full spaced" data-action="support">Написать в поддержку</button>`);}
@@ -267,14 +307,16 @@ document.addEventListener('submit',async(event)=>{
   event.preventDefault();const data=Object.fromEntries(new FormData(form));const submit=form.querySelector('[type="submit"],button');
   if(submit?.disabled)return;
   try {
-    if(form.id==='card-form'){const card=state.data.cards.find((c)=>c.id===form.dataset.id);const {paymentMethod,termsAccepted,...answers}=data;return await checkout(card,answers,termsAccepted==='on',paymentMethod,form.dataset.requestId);}
+    if(form.id==='card-form'){const card=state.data.cards.find((c)=>c.id===form.dataset.id);const {paymentMethod,termsAccepted,...answers}=data;if(answers.name!==undefined)answers.name=normaliseRecipient(answers.name);return await checkout(card,answers,termsAccepted==='on',paymentMethod,form.dataset.requestId);}
     submit.disabled=true;
     if(form.id==='promo-form'){const {reward}=await api('/api/promos/redeem',{method:'POST',body:JSON.stringify(data)});await refresh();closeModal();toast(reward.kind==='bonus'?`Начислено ${reward.bonus} бонусов на покупки.`:'Промокарточка доступна в каталоге.');if(reward.cardId)openCard(reward.cardId);return;}
     if(form.id==='support-form'){const {ticket}=await api('/api/support',{method:'POST',body:JSON.stringify(data)});closeModal();toast(`Обращение №${ticket.id.slice(0,8)} принято.`);return;}
     await adminSubmit(form,data,ctx);
   }catch(error){toast(error.message,true);}finally{if(submit?.isConnected)submit.disabled=false;}
 });
-document.addEventListener('input',(event)=>{if(event.target.id==='search'){state.search=event.target.value;document.querySelector('#catalog').innerHTML=catalogCards();}});
+document.addEventListener('input',(event)=>{if(event.target.name==='name'&&event.target.closest('#card-form'))updateRecipientPreview();if(event.target.id==='search'){state.search=event.target.value;document.querySelector('#catalog').innerHTML=catalogCards();}});
+document.addEventListener('focusout',event=>{if(event.target.name==='name'&&event.target.closest('#card-form')){event.target.value=normaliseRecipient(event.target.value);updateRecipientPreview();}});
+document.addEventListener('toggle',event=>{if(event.target.id==='recipient-preview')updateRecipientPreview();},true);
 document.addEventListener('change',(event)=>{if(event.target.name==='paymentMethod'&&event.target.closest('#card-form'))updateCheckoutMethod();if(event.target.id==='report-group')filterReports(event.target.value,ctx);if(event.target.name==='audience'&&document.querySelector('#limit-field'))document.querySelector('#limit-field').hidden=event.target.value!=='limit';if(event.target.name==='kind'&&event.target.closest('#ad-form')){document.querySelector('#audience-fields').hidden=event.target.value==='entry';document.querySelector('#ad-kind-hint').textContent=event.target.value==='entry'?'Можно сразу закрыть. Не чаще одного показа человеку в день.':'Сначала сохраним черновик и покажем предпросмотр.';}});
 document.addEventListener('keydown',(event)=>{if(event.key==='Escape')closeModal();if(event.key==='Tab'&&document.body.classList.contains('modal-open')){const items=[...modalRoot.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),textarea,select')].filter(e=>e.getClientRects().length);const first=items[0],last=items.at(-1);if(!first)return;if(event.shiftKey&&(document.activeElement===first||!items.includes(document.activeElement))){event.preventDefault();last.focus();}else if(!event.shiftKey&&(document.activeElement===last||!items.includes(document.activeElement))){event.preventDefault();first.focus();}}});
 load();
