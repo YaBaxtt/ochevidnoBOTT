@@ -1,5 +1,6 @@
 import { Markup, Telegraf } from 'telegraf';
 import { publicPurchase, resolveBotSettings, terms, validPayment } from './product.js';
+import { ownedInlineResults } from './sharing.js';
 
 export function botMenu(config, text = 'Открыть «Очевидно»', tab = 'home') {
   if (!config.publicAppUrl) return Markup.inlineKeyboard([
@@ -19,7 +20,7 @@ export function botMenu(config, text = 'Открыть «Очевидно»', ta
 
 export const ABOUT_TEXT = '🃏 «Очевидно»\nСерьёзный подход к несерьёзным вопросам.\n\nОчевидные ответы, именные шуточные грамоты, наборы и частная коллекция «Для богатых». Красиво оформить абсурд — тоже искусство.\n\n🎓 Грамоты созданы для развлечения: это не настоящие дипломы, медицинские справки или предсказания. Здесь нет ставок, выигрышей и обещаний заработка.\n\nЦена видна до покупки. Оплата — в Telegram Stars, готовые результаты — в твоей коллекции. Бонусы за задания и промокоды можно потратить на карточки; вывести их нельзя.\n\nПравила: /terms\nВопрос по покупке: /paysupport';
 
-export const HELP_TEXT = '🧭 Как всё работает\n\n1. Открой мини-апп и выбери карточку.\n2. Заполни вопросы и проверь цену.\n3. Подтверди покупку в окне Telegram Stars.\n4. Забери результат в коллекции — он останется там и после закрытия приложения.\n\n🎟 Есть промокод? Нажми «Ввести промокод» или отправь /promo КОД. Задания дают внутренние бонусы, не Stars для вывода.\n\nБыстрый доступ\n/cards — каталог\n/collection — купленные карточки\n/bundles — наборы грамот\n/premium — для богатых\n/tasks — задания и бонусы\n/profile — профиль и Gram-кошелёк\n\nЕсли что-то пошло не так\n/paysupport — помощь с покупкой и возвратом\n/about — о проекте\n/terms — правила\n/cancel — отменить ввод\n/stop — отключить рекламные сообщения\n/start — вернуться в начало и включить сообщения\n\nМини-апп нужно открывать кнопкой в этом боте. Если видишь старый экран, закрой его и отправь /start ещё раз. Не плати повторно, если покупка задержалась: сначала обратись в поддержку.';
+export const HELP_TEXT = '🧭 Как всё работает\n\n1. Открой мини-апп и выбери карточку.\n2. Заполни вопросы и проверь цену.\n3. Подтверди покупку в окне Telegram Stars.\n4. Забери результат в коллекции — он останется там и после закрытия приложения.\n\n🎟 Есть промокод? Нажми «Ввести промокод» или отправь /promo КОД. Задания дают внутренние бонусы, не Stars для вывода.\n\nБыстрый доступ\n/cards — каталог\n/collection — купленные карточки\n/bundles — наборы грамот\n/premium — для богатых\n/tasks — задания и бонусы\n/profile — профиль и Gram-кошелёк\n\nЕсли что-то пошло не так\n/paysupport — помощь с покупкой и возвратом\n/about — о проекте\n/terms — правила\n/cancel — отменить ввод\n/stop — отключить рекламные сообщения\n/share — отправить покупку картинкой\n/start — вернуться в начало и включить сообщения\n\nМини-апп нужно открывать кнопкой в этом боте. Если видишь старый экран, закрой его и отправь /start ещё раз. Не плати повторно, если покупка задержалась: сначала обратись в поддержку.';
 
 export function createBot({ store, config }) {
   if (!config.botToken || config.demo) return null;
@@ -43,7 +44,7 @@ export function createBot({ store, config }) {
   bot.use(async (ctx, next) => {
     if(ctx.chat && ctx.chat.type !== 'private') return;
     for (const map of [promoWaiting, supportWaiting]) for (const [id, expires] of map) if (expires <= Date.now()) map.delete(id);
-    if (ctx.from && ctx.chat?.type === 'private') await store.upsertUser(ctx.from);
+    if (ctx.from && (ctx.chat?.type === 'private' || ctx.update.inline_query)) await store.upsertUser(ctx.from);
     return next();
   });
   bot.start(async (ctx) => {
@@ -54,8 +55,18 @@ export function createBot({ store, config }) {
     promoWaiting.delete(String(ctx.from.id)); supportWaiting.delete(String(ctx.from.id));
     const settings = await store.getBotSettings();
     const greeting = settings.welcome.replaceAll('{name}', ctx.from.first_name || 'друг');
-    await ctx.reply(greeting, menu(settings.buttonText));
+    await ctx.reply(greeting, menu(settings.buttonText,payload==='collection'?'collection':'home'));
   });
+  bot.on('inline_query',async ctx=>{
+    const options={is_personal:true,cache_time:0,button:{text:'Моя коллекция · открыть бота',start_parameter:'collection'}};
+    try {
+      const page=await ownedInlineResults({store,config:{...config,botUsername:bot.botInfo?.username||config.botUsername},userId:ctx.from.id,query:ctx.inlineQuery.query,offset:ctx.inlineQuery.offset});
+      await ctx.answerInlineQuery(page.results,{...options,next_offset:page.nextOffset});
+    }catch{
+      await ctx.answerInlineQuery([],{...options,next_offset:''});
+    }
+  });
+  bot.command('share',ctx=>ctx.reply(`🖼 Твоя коллекция — прямо в переписке.\n\nВ любом чате напиши @${bot.botInfo?.username||config.botUsername||'obviously_bbot'} и пробел. Появятся только твои выданные карточки и грамоты. Выбери картинку и отправь. Можно дописать название для поиска.\n\nИли открой результат в мини-аппе и нажми «Отправить фото». На картинке будет имя и ответ; @username покупателя не добавляется.`,menu('Моя коллекция','collection')));
   bot.command(['menu', 'cards'], (ctx) => ctx.reply('🃏 Каталог «Очевидно»\n\nОтветы, грамоты и другие убедительные поводы ничего не усложнять. Цена каждой карточки видна до покупки.', menu()));
   const about=ABOUT_TEXT;
   bot.command('about',ctx=>ctx.reply(about,menu()));
@@ -66,7 +77,7 @@ export function createBot({ store, config }) {
   bot.command('promo',async ctx=>{const code=ctx.message.text.replace(/^\/promo(?:@\w+)?\s*/,'').trim();if(code)return redeem(ctx,code);waitFor(promoWaiting,ctx.from.id);await ctx.reply('🎟 Есть промокод?\n\nПришли его следующим сообщением или напиши /promo КОД.\nОтмена: /cancel. Ввод доступен 5 минут.');});
   bot.action('enter_promo',async ctx=>{await ctx.answerCbQuery();waitFor(promoWaiting,ctx.from.id);await ctx.reply('🎟 Пришли промокод одним сообщением.\n\nОтмена: /cancel. Ввод доступен 5 минут.');});
   bot.command('cancel',ctx=>{promoWaiting.delete(String(ctx.from.id));supportWaiting.delete(String(ctx.from.id));return ctx.reply('Ввод отменён. Возвращаемся к очевидному.',menu());});
-  bot.command('tasks', (ctx) => ctx.reply('🎯 Задания и бонусы\n\nВыполни задание, нажми «Проверить» и получи бонусы на карточки. Бонусы не являются Stars или TON и не выводятся.', menu('Открыть задания', 'tasks')));
+  bot.command('tasks', (ctx) => ctx.reply('🎯 Задания и бонусы\n\nВыполни задание, нажми «Проверить» и получи бонусы на карточки. Бонусы не являются Stars или Gram и не выводятся.', menu('Открыть задания', 'tasks')));
   bot.command('profile', (ctx) => ctx.reply('👤 Всё твоё — здесь.\n\nПокупки, бонусы, Gram-кошелёк и настройки сообщений. Кошелёк остаётся под твоим контролем: seed-фразу мы не спрашиваем.', menu('Мой профиль', 'profile')));
   bot.command('collection', async (ctx) => {
     const items = (await store.recentPurchases(ctx.from.id)).filter((p) => p.state === 'paid').slice(0, 5).map(publicPurchase);
@@ -150,6 +161,7 @@ export async function configureBot(bot, config, settings) {
     { command: 'profile', description: 'Профиль и Gram-кошелёк' }, { command: 'help', description: 'Как всё работает' },
     { command: 'promo', description: 'Активировать промокод' }, { command: 'bundles', description: 'Наборы грамот' },
     { command: 'premium', description: 'Частная коллекция · для богатых' }, { command: 'about', description: 'О проекте' },
+    { command: 'share', description: 'Отправить карточку картинкой' },
     { command: 'terms', description: 'Правила' }, { command: 'paysupport', description: 'Помощь по платежам' },
     { command: 'stop', description: 'Отключить рекламу' }, { command: 'cancel', description: 'Отменить ввод' }
   ];

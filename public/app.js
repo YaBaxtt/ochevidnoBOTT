@@ -1,6 +1,7 @@
 import { icon, cardIcons } from './icons.js';
-import { adminPage, loadAdmin, adminClick, adminSubmit, filterReports } from './admin.js?v=5';
-import { certificateSvg, downloadCertificate, sampleCertificate } from './certificate.js?v=3';
+import { adminPage, loadAdmin, adminClick, adminSubmit, filterReports } from './admin.js?v=6';
+import { certificateSvg, downloadCertificate, certificateSample } from './certificate.js?v=4';
+import { resultCardSvg, sampleResult, sampleResultCard } from './result-visuals.js?v=1';
 import { artImage, artworkSlug } from './art.js?v=3';
 import { BRAND } from './brand.js?v=2';
 
@@ -10,7 +11,6 @@ const toastRoot = document.querySelector('#toast-root');
 const telegram = window.Telegram?.WebApp;
 const requestedTab = new URLSearchParams(location.search).get('tab') || new URLSearchParams(telegram?.initData || '').get('start_param');
 const state = { view: ['home','profile','tasks','top','collection','premium','bundles','admin'].includes(requestedTab) ? requestedTab : 'home', data: null, category:'all', search:'', adminTab:'overview', wallet:null, balance:null, walletError:'' };
-let displayedCertificate;
 let displayedDocument;
 let modalOpener;
 try { document.body.classList.toggle('reduce-motion',localStorage.getItem('obvious.reduce-motion')==='1'); } catch {}
@@ -72,11 +72,11 @@ function renderHome() {
   <div class="editorial-links"><button class="premium-entry art-entry" data-view="premium">${artImage('premium',{className:'entry-cover'})}<small>ЧАСТНАЯ КОЛЛЕКЦИЯ</small><b>Для богатых.</b><span>Дорогая шутка. От 100 Stars.</span>${icon('arrow')}</button><button class="bundle-entry art-entry" data-view="bundles">${artImage('bundles',{className:'entry-cover'})}<small>В ОДНОЙ ПАПКЕ</small><b>Наборы грамот</b><span>Несколько поводов гордиться.</span>${icon('arrow')}</button></div>
   ${daily?`<button class="daily-pick" data-card="${daily.id}"><span class="daily-icon art-thumb">${artImage(artworkSlug(daily.id),{sizes:'40px'})}</span><span><small>ВЫБОР ДНЯ</small><b>${esc(daily.title)}</b></span>${stars(daily.priceStars)}${icon('chevron')}</button>`:''}
   ${section('Каталог',`<span>${state.data.cards.length} поводов проверить</span>`)}<div class="catalog-tools"><label class="search">${icon('search')}<input id="search" type="search" placeholder="Найти что-нибудь очевидное" value="${esc(state.search)}" aria-label="Поиск карточек"></label><div class="category-tabs">${[['all','Все'],['math','Вычислить'],['you','Про тебя'],['documents','Грамоты'],['bundles','Наборы'],['favorites','Избранное']].map(([k,l])=>`<button data-category="${k}" class="${state.category===k?'active':''}">${l}</button>`).join('')}</div></div><section class="card-grid" id="catalog">${catalogCards()}</section>
-  <button class="sample-entry" data-action="sample"><span>${icon('document')}</span><span><b>Бумага всё стерпит.</b><small>Посмотреть образец грамоты · бесплатно</small></span>${icon('arrow')}</button><div class="footer-note">${icon('spark')}<p>Покупаешь настроение.<br>И красивое подтверждение своей догадки.</p></div><button class="legal-link" data-action="terms">Правила и условия покупки ${icon('arrow')}</button>`;
+  <button class="sample-entry" data-action="sample"><span>${icon('document')}</span><span><b>Бумага всё стерпит.</b><small>Образцы карточек и грамот · бесплатно</small></span>${icon('arrow')}</button><div class="footer-note">${icon('spark')}<p>Покупаешь настроение.<br>И красивое подтверждение своей догадки.</p></div><button class="legal-link" data-action="terms">Правила и условия покупки ${icon('arrow')}</button>`;
 }
 function renderSpecial(kind) {
   const premium=kind==='premium',cards=state.data.cards.filter(c=>premium?c.premium:c.kind==='bundle');
-  return `<button class="back-link" data-view="home">← Главная</button><div class="page-title special-title ${premium?'premium-title':''}">${artImage(premium?'premium':'bundles',{className:'special-title-art',eager:true})}<span class="eyebrow">${premium?'ЧАСТНАЯ КОЛЛЕКЦИЯ':'СОБРАНО В ОДНУ ПАПКУ'}</span><h1>${premium?'Для богатых.':'Всё официально.<br>И сразу.'}</h1><p>${premium?'100, 150, 200, 500 и 1000 Stars. Только красивая именная шутка — без призов, доходности и скрытых преимуществ.':'Несколько именных документов за одну оплату. Каждый останется в коллекции и скачивается отдельно.'}</p></div><section class="card-grid special-grid">${cards.map(c=>cardMarkup(c,c.kind==='bundle')).join('')}</section><button class="legal-link" data-action="terms">Условия покупки →</button>`;
+  return `<button class="back-link" data-view="home">← Главная</button><div class="page-title special-title ${premium?'premium-title':''}">${artImage(premium?'premium':'bundles',{className:'special-title-art',eager:true})}<span class="eyebrow">${premium?'ЧАСТНАЯ КОЛЛЕКЦИЯ':'СОБРАНО В ОДНУ ПАПКУ'}</span><h1>${premium?'Для богатых.':'Всё официально.<br>И сразу.'}</h1><p>${premium?'100, 150, 200, 500 и 1000 Stars. Только красивая именная шутка — без призов, доходности и скрытых преимуществ.':'Несколько именных документов за одну оплату. Каждый останется в коллекции и скачивается отдельно.'}</p></div><button class="sample-section-link" data-sample-kind="${premium?'premium':'bundle'}">${icon('document')} Образец ${premium?'частной коллекции':'грамоты из набора'} ${icon('arrow')}</button><section class="card-grid special-grid">${cards.map(c=>cardMarkup(c,c.kind==='bundle')).join('')}</section><button class="legal-link" data-action="terms">Условия покупки →</button>`;
 }
 function renderTasks() {
   return `<div class="page-title"><span class="eyebrow">ПРОВЕРИЛИ — НАЧИСЛИЛИ</span><h1>Маленькие дела.<br>Новые карточки.</h1><p>Выполняй задания, забирай бонусы и трать их на карточки. 1 бонус = 1 единица цены.</p></div><div class="bonus-panel">${icon('gift')}<span>Твои бонусы<b>${fmt(state.data.profile.bonusBalance)}</b></span><button class="small-button" data-view="home">Потратить ${icon('arrow')}</button></div>${section('Доступные задания',`<span>${state.data.tasks.length}</span>`)}<div class="task-list">${state.data.tasks.length?state.data.tasks.map((t)=>`<article class="task"><span class="task-icon">${icon('chat')}</span><div><h3>${esc(t.title)}</h3><p>${esc(t.subtitle)}</p></div><b class="reward">+${t.rewardPoints}</b><div class="task-actions"><button class="secondary" data-open-link="${esc(t.targetUrl)}">Выполнить ${icon('arrow')}</button><button class="primary" data-claim-task="${t.id}">Проверить</button></div></article>`).join(''):`<div class="empty">${icon('tasks')}<h3>Пока можно выдохнуть</h3><p>Задания появятся здесь, когда администратор добавит и проверит каналы.</p><button class="secondary" data-view="home">Посмотреть карточки</button></div>`}</div><p class="muted-note">Бонусы используются внутри приложения. Они не конвертируются в Stars или Gram.</p>`;
@@ -107,7 +107,7 @@ function navigate(view) { if(view==='admin'&&!state.data.isAdmin) return; state.
 function showModal(html) { if(!document.body.classList.contains('modal-open'))modalOpener=document.activeElement;modalRoot.innerHTML=`<div class="modal-backdrop"><section class="sheet" role="dialog" aria-modal="true" tabindex="-1"><div class="drag"></div><button class="close" data-action="close" aria-label="Закрыть">${icon('close')}</button>${html}</section></div>`;document.body.classList.add('modal-open');app.inert=true;modalRoot.querySelector('.sheet').focus({preventScroll:true}); }
 function closeModal() { modalRoot.replaceChildren(); document.body.classList.remove('modal-open');app.inert=false;if(modalOpener?.isConnected)modalOpener.focus({preventScroll:true});modalOpener=null; }
 function agreement() { return '<label class="agree"><input name="termsAccepted" type="checkbox" required><span>Я прочитал <a href="/api/terms" target="_blank" rel="noreferrer">правила</a> и понимаю, что покупаю развлекательную карточку.</span></label>'; }
-function extraSettings(){return `${state.data.freeOpenings?`<section class="free-opening-card spaced">${icon('gift')}<span>Бесплатные открытия<b>${fmt(state.data.freeOpenings)} в запасе</b><small>Любая карточка или набор · без Stars</small></span><button class="secondary" data-view="home">Выбрать</button></section>`:''}<div class="settings-list spaced"><button class="setting" data-action="promo">${icon('gift')}<span>Промокод<small>Бонусы или карточка в подарок</small></span>${icon('chevron')}</button><button class="setting" data-action="my-tickets">${icon('chat')}<span>Мои обращения<small>Проверить статус заявки</small></span>${icon('chevron')}</button><button class="setting" data-action="motion">${icon('spark')}<span>Уменьшить движение<small>Спокойное появление без эффектов</small></span><span class="toggle ${document.body.classList.contains('reduce-motion')?'on':''}"></span></button></div>`;}
+function extraSettings(){return `${state.data.freeOpenings?`<section class="free-opening-card spaced">${icon('gift')}<span>Бесплатные открытия<b>${fmt(state.data.freeOpenings)} в запасе</b><small>Любая карточка или набор · без Stars</small></span><button class="secondary" data-view="home">Выбрать</button></section>`:''}<div class="settings-list spaced"><button class="setting" data-action="promo">${icon('gift')}<span>Промокод<small>Бонусы или карточка в подарок</small></span>${icon('chevron')}</button><button class="setting" data-action="sample">${icon('document')}<span>Образцы<small>Карточка, грамоты и частная коллекция</small></span>${icon('chevron')}</button><button class="setting" data-action="inline-collection">${icon('chat')}<span>Отправить из любого чата<small>Как открыть покупки через @${esc(state.data.botUsername||'бота')}</small></span>${icon('chevron')}</button><button class="setting" data-action="my-tickets">${icon('chat')}<span>Мои обращения<small>Проверить статус заявки</small></span>${icon('chevron')}</button><button class="setting" data-action="motion">${icon('spark')}<span>Уменьшить движение<small>Спокойное появление без эффектов</small></span><span class="toggle ${document.body.classList.contains('reduce-motion')?'on':''}"></span></button></div>`;}
 function openCard(id,flashlightConfirm=false) {
   const card=state.data.cards.find((c)=>c.id===id); if(!card) return toast('Карточка сейчас недоступна.',true);
   if(id==='flashlight'&&!flashlightConfirm) return openFlashlight(card);
@@ -117,7 +117,7 @@ function openCard(id,flashlightConfirm=false) {
   const voucher=state.data.vouchers?.find(v=>v.cardId===id&&v.quantity>0);
   const freeOpenings=state.data.freeOpenings||0;
   const bundle=card.bundleItems?.length?`<div class="bundle-contents"><small>В НАБОРЕ · ${card.bundleItems.length} ДОКУМЕНТА</small>${card.bundleItems.map(i=>`<span>${icon('document')}${esc(state.data.cards.find(c=>c.id===i)?.title||i)}</span>`).join('')}</div>`:'';
-  showModal(`<div class="checkout-visual">${artImage(artworkSlug(id),{eager:true,sizes:'180px'})}</div><span class="eyebrow">${esc(card.category)}</span><h2>${esc(card.title)}</h2><p>${esc(card.subtitle)}</p><div class="checkout-price">${stars(card.priceStars)}<small>ОБЫЧНАЯ ЦЕНА · TELEGRAM STARS</small></div>${bundle}${card.kind==='certificate'?`<button class="sample-link" data-sample-card="${id}">Посмотреть образец грамоты ↗</button>`:''}<form class="form" id="card-form" data-id="${id}" data-request-id="${crypto.randomUUID()}">${fields}<div class="payment-options">${freeOpenings?`<label class="free-payment-option"><input type="radio" name="paymentMethod" value="free" checked><span>Бесплатное открытие<small>Осталось: ${fmt(freeOpenings)} · потратится 1</small></span><b>Без Stars</b></label>`:''}${voucher?`<label><input type="radio" name="paymentMethod" value="voucher" ${freeOpenings?'':'checked'}><span>По промокоду<small>Доступно: ${voucher.quantity}</small></span><b>Бесплатно</b></label>`:''}<label><input type="radio" name="paymentMethod" value="stars" ${voucher||freeOpenings?'':'checked'}><span>Telegram Stars</span>${stars(card.priceStars)}</label><label class="${bonusAvailable?'':'unavailable'}"><input type="radio" name="paymentMethod" value="bonus" ${bonusAvailable?'':'disabled'}><span>Бонусами<small>На счёте: ${state.data.profile.bonusBalance}</small></span><b>${card.priceStars}</b></label></div>${agreement()}<button class="primary full" type="submit" ${state.data.sales?.paused?'disabled':''}></button></form><div class="payment-note" id="checkout-note"></div>`);
+  showModal(`<div class="checkout-visual">${artImage(artworkSlug(id),{eager:true,sizes:'180px'})}</div><span class="eyebrow">${esc(card.category)}</span><h2>${esc(card.title)}</h2><p>${esc(card.subtitle)}</p><div class="checkout-price">${stars(card.priceStars)}<small>ОБЫЧНАЯ ЦЕНА · TELEGRAM STARS</small></div>${bundle}<button class="sample-link" data-sample-card="${id}">Посмотреть образец ↗</button><form class="form" id="card-form" data-id="${id}" data-request-id="${crypto.randomUUID()}">${fields}<div class="payment-options">${freeOpenings?`<label class="free-payment-option"><input type="radio" name="paymentMethod" value="free" checked><span>Бесплатное открытие<small>Осталось: ${fmt(freeOpenings)} · потратится 1</small></span><b>Без Stars</b></label>`:''}${voucher?`<label><input type="radio" name="paymentMethod" value="voucher" ${freeOpenings?'':'checked'}><span>По промокоду<small>Доступно: ${voucher.quantity}</small></span><b>Бесплатно</b></label>`:''}<label><input type="radio" name="paymentMethod" value="stars" ${voucher||freeOpenings?'':'checked'}><span>Telegram Stars</span>${stars(card.priceStars)}</label><label class="${bonusAvailable?'':'unavailable'}"><input type="radio" name="paymentMethod" value="bonus" ${bonusAvailable?'':'disabled'}><span>Бонусами<small>На счёте: ${state.data.profile.bonusBalance}</small></span><b>${card.priceStars}</b></label></div>${agreement()}<button class="primary full" type="submit" ${state.data.sales?.paused?'disabled':''}></button></form><div class="payment-note" id="checkout-note"></div>`);
   updateCheckoutMethod();
 }
 function updateCheckoutMethod() {
@@ -144,14 +144,15 @@ async function verifyPayment(id,manual=false) {
   } catch(error){toast(error.message,true);}
 }
 function showResult(p,itemIndex=null) {
-  if(p.state!=='paid'||!p.result)return verifyPayment(p.id,true);const r=p.result;displayedCertificate=r.kind==='certificate'?r:null;
+  if(p.state!=='paid'||!p.result)return verifyPayment(p.id,true);const r=p.result;
   displayedDocument=r.kind==='certificate'?{purchaseId:p.id,itemIndex}:null;
+  const presented={...r,botUsername:state.data.botUsername,collectionStyle:r.rank==='Частная коллекция'?'premium':itemIndex!==null?'bundle':'standard'};
   const result=r.kind==='certificate'
-    ? `<div class="certificate-wrap">${certificateSvg(r)}</div><button class="secondary full spaced" data-action="download-certificate">Скачать грамоту · SVG ${icon('arrow')}</button>${!isDemo()?`<button class="text-button full" data-send-document="${p.id}" data-item-index="${itemIndex??''}">Получить файлом в боте</button>`:''}<p class="muted-note">SVG сохраняется без потери качества. Можно открыть в браузере или редакторе.</p>`
+    ? `<div class="certificate-wrap">${certificateSvg(presented)}</div><button class="secondary full spaced" data-action="download-certificate">Скачать грамоту · SVG ${icon('arrow')}</button>${!isDemo()?`<button class="text-button full" data-send-document="${p.id}" data-item-index="${itemIndex??''}">Получить файлом в боте</button>`:''}<p class="muted-note">SVG — для печати. JPEG — чтобы сохранить на телефон или отправить другу.</p>`
     : r.kind==='bundle'
       ? `<div class="bundle-issued"><span class="eyebrow">КОМПЛЕКТ ВЫДАН</span><h2>${esc(r.headline)}</h2><p>${esc(r.detail)}</p>${r.items.map((item,i)=>`<button class="collection-row" data-bundle-purchase="${p.id}" data-bundle-index="${i}"><span class="collection-icon">${icon('document')}</span><span><b>${esc(item.title)}</b><small>Именной документ · открыть и скачать</small></span>${icon('chevron')}</button>`).join('')}</div>`
-      : `<section class="result-card"><div class="result-brand">очевидно ${icon('spark')}</div><span class="badge">${esc(r.badge)}</span><div class="result-emblem">${icon(cardIcons[p.cardId])}</div><h2>${esc(r.headline)}</h2><p>${esc(r.detail)}</p><small>Серьёзно оформлено. Несерьёзно получено.</small></section>`;
-  showModal(`<div class="reveal-shell"><div class="reveal-curtain"><img src="${BRAND.smallAvatar}" alt=""><span>${r.kind==='certificate'?'ДОКУМЕНТ ЗАВЕРЕН':'ОЧЕВИДНО. ГОТОВО.'}</span><i></i></div><div class="reveal-content">${result}<div class="result-actions"><button class="secondary" data-view="collection">В коллекцию</button><button class="primary" data-share="${p.id}">Отправить ${icon('arrow')}</button></div>${p.paymentMethod==='free'?'<p class="muted-note">Бесплатное открытие · Stars не списаны</p>':''}<p class="purchase-id">Заказ: ${esc(p.id)}</p></div></div>`);if(telegram?.isVersionAtLeast?.('6.1'))telegram.HapticFeedback?.notificationOccurred?.('success');
+      : `<div class="result-image-wrap">${resultCardSvg({result:r,card:state.data.cards.find(card=>card.id===p.cardId),firstName:state.data.profile.firstName,botUsername:state.data.botUsername})}</div>`;
+  showModal(`<div class="reveal-shell"><div class="reveal-curtain"><img src="${BRAND.smallAvatar}" alt=""><span>${r.kind==='certificate'?'ДОКУМЕНТ ЗАВЕРЕН':'ОЧЕВИДНО. ГОТОВО.'}</span><i></i></div><div class="reveal-content">${result}<div class="result-actions"><button class="secondary" data-view="collection">В коллекцию</button><button class="primary" data-share="${p.id}" data-share-index="${itemIndex??''}">Отправить фото ${icon('arrow')}</button></div><button class="text-button full" data-download-share="${p.id}" data-share-index="${itemIndex??''}">Сохранить картинкой · JPEG</button>${p.paymentMethod==='free'?'<p class="muted-note">Бесплатное открытие · Stars не списаны</p>':''}<p class="purchase-id">Заказ: ${esc(p.id)}</p></div></div>`);if(telegram?.isVersionAtLeast?.('6.1'))telegram.HapticFeedback?.notificationOccurred?.('success');
 }
 async function saveDocument(target) {
   const document={...displayedDocument};if(!document.purchaseId)return;
@@ -171,7 +172,48 @@ async function sendDocument(target) {
     toast('Грамота отправлена в личный чат с ботом. Сохрани файл из сообщения.');
   }finally{if(target.isConnected)target.disabled=false;}
 }
-function showSample(cardId){showModal(`<span class="eyebrow">БЕСПЛАТНЫЙ ОБРАЗЕЦ</span><h2>Так выглядит грамота.</h2><p>После покупки здесь будут твои имя, дата и номер документа.</p><div class="certificate-wrap sample-certificate">${certificateSvg(sampleCertificate,true)}</div><button class="primary full spaced" ${cardId?`data-card="${cardId}"`:'data-action="close"'}>${cardId?'Вернуться к карточке':'Понятно'}</button>`);}
+function showSample(cardId,kind) {
+  const card=state.data.cards.find(c=>c.id===cardId);
+  kind=kind||(card?.kind==='bundle'?'bundle':card?.premium?'premium':card?.kind==='certificate'?'standard':'result');
+  const labels={result:'Карточка',standard:'Грамота',premium:'Для богатых',bundle:'Из набора'};
+  const visual=kind==='result'?resultCardSvg({result:sampleResult,card:sampleResultCard,firstName:'Фамилия Имя',botUsername:state.data.botUsername,sample:true}):certificateSvg({...certificateSample(kind),botUsername:state.data.botUsername},true);
+  showModal(`<span class="eyebrow">ОБРАЗЦЫ · БЕЗ ПОКУПКИ</span><h2>${kind==='premium'?'Частная коллекция.':kind==='result'?'Ответ — как открытка.':'Документ с характером.'}</h2><p>Пример оформления. Вместо «Фамилия Имя» будет твоё имя. Цифры и текст здесь демонстрационные, это не твой результат.</p><div class="sample-tabs">${Object.entries(labels).map(([k,label])=>`<button class="${kind===k?'active':''}" data-sample-kind="${k}" data-return-card="${cardId||''}">${label}</button>`).join('')}</div><div class="${kind==='result'?'result-image-wrap':'certificate-wrap'} sample-certificate">${visual}</div><button class="primary full spaced" ${cardId?`data-card="${cardId}"`:'data-action="close"'}>${cardId?'Вернуться к карточке':'Понятно'}</button>`);
+}
+const shareSpec=target=>({purchaseId:target.dataset.share||target.dataset.sendShare||target.dataset.downloadShare,itemIndex:target.dataset.shareIndex===''?null:Number(target.dataset.shareIndex)});
+async function shareImageInfo(spec){return api(`/api/purchases/${spec.purchaseId}/share-image`,{method:'POST',body:JSON.stringify({itemIndex:spec.itemIndex})});}
+function showShareOptions(spec,image) {
+  showModal(`<span class="eyebrow">ОТПРАВЛЯЕМ КАРТИНКУ</span><h2>Не просто ссылка.</h2><p>Фото с именем, результатом и подписью «Очевидно». Username покупателя не добавляем.</p><img class="share-preview" src="${esc(image.path)}" alt="Предпросмотр своей карточки">${!isDemo()?`<button class="primary full spaced" data-send-share="${spec.purchaseId}" data-share-index="${spec.itemIndex??''}">Получить фото в боте</button>`:''}<button class="secondary full spaced" data-download-share="${spec.purchaseId}" data-share-index="${spec.itemIndex??''}">Скачать JPEG</button>${telegram?.switchInlineQuery?`<button class="text-button full" data-inline-share="${esc(image.selector)}">Выбрать чат через inline-поиск</button>`:''}<p class="muted-note">Из личного чата фото можно переслать кому угодно. Без повторной покупки.</p>`);
+}
+async function shareResult(target) {
+  const spec=shareSpec(target);target.disabled=true;
+  try {
+    const image=await shareImageInfo(spec);
+    if(!isDemo()&&telegram?.initData&&telegram.shareMessage&&telegram.isVersionAtLeast?.('8.0')) {
+      try {
+        const prepared=await api(`/api/purchases/${spec.purchaseId}/share-prepare`,{method:'POST',body:JSON.stringify({itemIndex:spec.itemIndex})});
+        telegram.shareMessage(prepared.messageId,sent=>toast(sent?'Картинка отправлена.':'Отправка отменена. Карточка осталась в коллекции.'));return;
+      }catch(error){toast(error.message,true);}
+    }
+    showShareOptions(spec,image);
+  }finally{if(target.isConnected)target.disabled=false;}
+}
+async function downloadShareImage(target) {
+  const spec=shareSpec(target);target.disabled=true;
+  try {
+    const image=await shareImageInfo(spec),url=new URL(image.path+'?download=1',location.origin).href;
+    let opened=false;try{opened=downloadCertificate({url,fileName:image.fileName,telegram,onStatus:toast});}catch{}
+    if(!opened){showShareOptions(spec,image);toast('Этот клиент не поддерживает скачивание. Получи фото в личном чате с ботом.');}
+  }finally{if(target.isConnected)target.disabled=false;}
+}
+async function sendShareImage(target) {
+  const spec=shareSpec(target);target.disabled=true;
+  try{await api(`/api/purchases/${spec.purchaseId}/share-send`,{method:'POST',body:JSON.stringify({itemIndex:spec.itemIndex})});toast('Фото отправлено в личный чат с ботом. Теперь его можно переслать.');}
+  finally{if(target.isConnected)target.disabled=false;}
+}
+function inlineCollection() {
+  const name=state.data.botUsername||'obviously_bbot';
+  showModal(`<span class="eyebrow">ТВОИ ПОКУПКИ В ЛЮБОМ ЧАТЕ</span><h2>@${esc(name)} + пробел</h2><p>Введи это в поле сообщения другу. Появятся твои выданные карточки и грамоты. Выбери картинку — и отправь. Чтобы найти нужную, допиши название.</p><p>Результаты поиска видишь только ты. Друг получит лишь выбранную тобой картинку с именем, ответом и кнопкой проекта.</p>${telegram?.switchInlineQuery?'<button class="primary full" data-inline-share="">Выбрать карточку и чат</button>':''}<button class="text-button full" data-view="collection">Моя коллекция</button>`);
+}
 function openPromo(){showModal(`<div class="sheet-card-icon">${icon('gift')}</div><h2>Есть свой код?</h2><p>Активируй бонусы на покупки или конкретную карточку.</p><form id="promo-form" class="form"><label>Промокод<input name="code" maxlength="40" pattern="[A-Za-z0-9_-]{3,40}" autocomplete="off" required placeholder="OCHEVIDNO"></label><button class="primary full">Активировать</button></form><p class="muted-note">Бонусы используются только на карточки. Это не выводимые Stars.</p>`);}
 function openFlashlight(card) { modalOpener=document.activeElement;modalRoot.innerHTML=`<section class="flashlight" role="dialog" aria-modal="true" aria-label="Фонарик"><span class="eyebrow">СВЕТ В КОНЦЕ ПРИЛОЖЕНИЯ</span><div class="beam"></div><h2>Ну вот.<br>Теперь светло.</h2><p>Спокойно. Выключение бесплатное.</p><button class="primary full" data-action="close">Выключить фонарик</button><button class="text-button full" data-flash-card="${card.id}">Торжественно погасить · ${card.priceStars} ⭐</button></section>`;document.body.classList.add('modal-open');app.inert=true;modalRoot.querySelector('[data-action="close"]').focus({preventScroll:true}); }
 function openLink(url) {if(/^https:\/\/t\.me\//i.test(url)&&telegram?.initData)telegram.openTelegramLink(url);else if(telegram?.initData)telegram.openLink(url);else window.open(url,'_blank','noopener,noreferrer');}
@@ -193,13 +235,17 @@ document.addEventListener('click',async(event)=>{
     if(t.dataset.card)return openCard(t.dataset.card);
     if(t.dataset.flashCard)return openCard(t.dataset.flashCard,true);
     if(t.dataset.sampleCard)return showSample(t.dataset.sampleCard);
+    if(t.dataset.sampleKind)return showSample(t.dataset.returnCard||undefined,t.dataset.sampleKind);
+    if(t.dataset.inlineShare!==undefined){if(telegram?.switchInlineQuery&&telegram.isVersionAtLeast?.('6.7'))return telegram.switchInlineQuery(t.dataset.inlineShare,['users','groups','channels']);return toast(`Введи @${state.data.botUsername||'obviously_bbot'} и пробел в любом чате.`);}
+    if(t.dataset.sendShare)return await sendShareImage(t);
+    if(t.dataset.downloadShare)return await downloadShareImage(t);
     if(t.dataset.bundlePurchase){const {purchase}=await api(`/api/purchases/${t.dataset.bundlePurchase}`);const item=purchase.result?.items?.[Number(t.dataset.bundleIndex)];if(item)return showResult({...purchase,cardId:item.cardId,result:item.result},Number(t.dataset.bundleIndex));return;}
     if(t.dataset.sendDocument)return await sendDocument(t);
     if(t.dataset.favorite){const id=t.dataset.favorite;favorites.has(id)?favorites.delete(id):favorites.add(id);localStorage.setItem('obvious.favorites',JSON.stringify([...favorites]));return render();}
     if(t.dataset.category){state.category=t.dataset.category;return render();}
     if(t.dataset.demoConfirm){t.disabled=true;const {purchase}=await api(`/api/demo/purchases/${t.dataset.demoConfirm}/confirm`,{method:'POST',body:'{}'});await refresh();return showResult(purchase);}
     if(t.dataset.purchase||t.dataset.checkPurchase){const id=t.dataset.purchase||t.dataset.checkPurchase;const {purchase}=await api(`/api/purchases/${id}`);return purchase.state==='paid'?showResult(purchase):verifyPayment(id,true);}
-    if(t.dataset.share){const {purchase}=await api(`/api/purchases/${t.dataset.share}`);await api(`/api/purchases/${purchase.id}/share`,{method:'POST',body:'{}'});const r=displayedCertificate||purchase.result;return openLink(`https://t.me/share/url?url=${encodeURIComponent(state.data.shareUrl||location.origin)}&text=${encodeURIComponent(`${r.documentTitle||r.headline}\n${r.recipient||r.detail}\n\nМоя карточка в «Очевидно»`)}`);}
+    if(t.dataset.share)return await shareResult(t);
     if(t.dataset.openLink)return openLink(t.dataset.openLink);
     if(t.dataset.claimTask){t.disabled=true;const r=await api(`/api/tasks/${t.dataset.claimTask}/claim`,{method:'POST',body:'{}'});await refresh();return toast(r.message);}
     if(t.dataset.adClick){if(t.dataset.preview!=='true')await api(`/api/ads/${t.dataset.adClick}/event`,{method:'POST',body:JSON.stringify({event:'click'})});return openLink(t.dataset.url);}
@@ -207,6 +253,7 @@ document.addEventListener('click',async(event)=>{
     const a=t.dataset.action;
     if(a==='close')return closeModal();if(a==='retry')return load();if(a==='terms')return showTerms();if(a==='support')return openSupport();
     if(a==='sample')return showSample();if(a==='promo')return openPromo();if(a==='download-certificate'&&displayedDocument)return await saveDocument(t);
+    if(a==='inline-collection')return inlineCollection();
     if(a==='motion'){document.body.classList.toggle('reduce-motion');localStorage.setItem('obvious.reduce-motion',document.body.classList.contains('reduce-motion')?'1':'0');return render();}
     if(a==='my-tickets'){const {tickets}=await api('/api/support/mine');return showModal(`<h2>Мои обращения</h2><div class="admin-list">${tickets.length?tickets.map(r=>`<article class="admin-card"><h3>№${esc(r.id.slice(0,8))} · ${r.state==='resolved'?'Решено':'В работе'}</h3><p>${esc(r.message)}</p></article>`).join(''):'<p>Обращений пока нет.</p>'}</div><button class="primary full spaced" data-action="support">Написать в поддержку</button>`);}
     if(a==='wallet')return navigate('profile');if(a==='connect-wallet')return connectWallet();if(a==='refresh-wallet')return updateBalance();if(a==='disconnect-wallet'){await tonUI.disconnect();return;}

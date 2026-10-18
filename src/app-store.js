@@ -128,6 +128,7 @@ export class PostgresAppStore extends PostgresStore {
     `);
     await initReleaseSchema(this);
     await initFreeOpeningSchema(this);
+    await this.query(`CREATE INDEX IF NOT EXISTS purchases_owned_collection_idx ON purchases(telegram_id,created_at DESC,id DESC) WHERE state='paid'`);
   }
   async upsertUser(user) { return profile(await super.upsertUser(user)); }
   async getProfile(userId) {

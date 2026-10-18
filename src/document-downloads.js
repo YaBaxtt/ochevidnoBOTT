@@ -14,7 +14,7 @@ function ownedDocument(purchase,itemIndex=null) {
   } else if(itemIndex!==null)throw new Error('В этой карточке нет выбранного документа.');
   if(result.kind!=='certificate')throw new Error('Эта карточка не является грамотой.');
   const fileName=`ochevidno-${purchase.id.slice(0,8)}${itemIndex===null?'':`-${itemIndex+1}`}.svg`;
-  const svg=`<?xml version="1.0" encoding="UTF-8"?>\n${certificateSvg(result).replace('<svg ','<svg width="800" height="1100" ')}`;
+  const svg=`<?xml version="1.0" encoding="UTF-8"?>\n${certificateSvg({...result,collectionStyle:result.rank==='Частная коллекция'?'premium':itemIndex===null?'standard':'bundle'}).replace('<svg ','<svg width="800" height="1100" ')}`;
   return {fileName,svg,title:result.documentTitle};
 }
 

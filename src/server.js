@@ -15,6 +15,7 @@ import { registerEngagementApi } from './engagement-api.js';
 import { registerReleaseApi, startOwnerAlertWorker } from './release-api.js';
 import { registerFreeOpeningApi } from './free-openings.js';
 import { registerDocumentDownloads } from './document-downloads.js';
+import { registerSharingApi } from './sharing.js';
 import { publicPurchase, terms } from './product.js';
 import { startBroadcastWorker } from './broadcast.js';
 import { isTelegramMember, validateTelegramInitData } from './telegram-auth.js';
@@ -87,7 +88,7 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
   app.use(express.json({ limit: '64kb', type: 'application/json' }));
   app.param(['purchaseId','taskId','ticketId'],(req,res,next,value)=>/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value)?next():res.status(404).json({error:'Объект не найден.'}));
   // Use the package's IP normalizer so equivalent IPv6 addresses share one limit.
-  app.use('/api', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }));
+  app.use('/api', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false, skip:req=>/^\/api\/(?:shared-media|samples)\//.test(req.originalUrl) }));
 
   const requireActor = async (req, res, next) => {
     try {
@@ -124,7 +125,7 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
   app.get('/api/bootstrap', requireActor, async (req, res, next) => {
     try {
       const [profile, cards, tasks, leaderboard, purchases, entryAd, sales, vouchers, freeOpenings] = await Promise.all([store.getProfile(req.actor.id), store.getCards(), store.getTasks(), store.publicLeaderboard(), store.recentPurchases(req.actor.id), store.getEntryCampaign(req.actor.id),store.getSalesSettings(),store.getVouchers(req.actor.id),store.getFreeOpenings(req.actor.id)]);
-      res.json({ mode: config.demo ? 'demo' : 'live', profile, cards: cards.map(cardForClient).filter(Boolean), tasks, leaderboard, purchases: purchases.map(publicPurchase), entryAd, sales, vouchers, freeOpenings, walletEnabled: Boolean(config.publicAppUrl.startsWith('https://')), botUrl: config.botUsername ? `https://t.me/${config.botUsername}?startapp=profile` : null, shareUrl: config.botUsername ? `https://t.me/${config.botUsername}?startapp=home` : config.publicAppUrl || null, supportUrl: config.supportUrl, isAdmin: isAdmin(req.actor.id), termsUrl: '/api/terms' });
+      res.json({ mode: config.demo ? 'demo' : 'live', profile, cards: cards.map(cardForClient).filter(Boolean), tasks, leaderboard, purchases: purchases.map(publicPurchase), entryAd, sales, vouchers, freeOpenings, botUsername: config.botUsername || '', walletEnabled: Boolean(config.publicAppUrl.startsWith('https://')), botUrl: config.botUsername ? `https://t.me/${config.botUsername}?startapp=profile` : null, shareUrl: config.botUsername ? `https://t.me/${config.botUsername}?startapp=home` : config.publicAppUrl || null, supportUrl: config.supportUrl, isAdmin: isAdmin(req.actor.id), termsUrl: '/api/terms' });
     } catch (error) { next(error); }
   });
 
@@ -311,6 +312,7 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
   registerReleaseApi({ app, store, config, getTelegram, requireActor, requireAdmin });
   registerFreeOpeningApi({ app, store, requireAdmin });
   registerDocumentDownloads({ app, store, config, getTelegram, requireActor });
+  registerSharingApi({ app, store, config, getTelegram, requireActor, requireAdmin });
 
   app.use(express.static(publicDir, {
     index: 'index.html', maxAge: config.env === 'production' ? '1h' : 0, etag: true,
@@ -360,7 +362,7 @@ export async function start(config = defaultConfig) {
     stopWorker = startBroadcastWorker({ store, telegram: bot.telegram });
     stopAlerts = startOwnerAlertWorker({store,telegram:bot.telegram});
     // Telegraf launch runs until polling stops; register all settings before starting it.
-    bot.launch().catch((error) => { console.error('Не удалось запустить Telegram polling:', error.message); process.exitCode = 1; server.close(); });
+    bot.launch({allowedUpdates:['message','callback_query','pre_checkout_query','my_chat_member','inline_query']}).catch((error) => { console.error('Не удалось запустить Telegram polling:', error.message); process.exitCode = 1; server.close(); });
   }
   const shutdown = async (signal) => { stopWorker(); stopAlerts(); server.close(); if (bot) { try { bot.stop(signal); } catch {} } await store.close(); };
   process.once('SIGINT', () => shutdown('SIGINT'));

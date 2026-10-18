@@ -7,6 +7,7 @@ import { processDelivery } from '../src/broadcast.js';
 import { makeResult } from '../src/card-engine.js';
 import { processOwnerAlert } from '../src/release-api.js';
 import { DEFAULT_BOT_SETTINGS, LEGACY_BOT_SETTINGS } from '../src/product.js';
+import { ownedInlineResults } from '../src/sharing.js';
 
 test('PostgreSQL schema, bonus ledger, ad queue and delivery SQL work together',async()=>{
   const db=new PGlite();
@@ -87,6 +88,10 @@ test('PostgreSQL schema, bonus ledger, ad queue and delivery SQL work together',
     assert.equal(await store.getPurchase(rejectedId,1),null);
     assert.equal((await store.getProfile(1)).starsSpent,20);
     const freeReport=await store.releaseReport();assert.equal(freeReport.freeOpenings,2);assert.equal(freeReport.receivedStars,20);assert.equal(freeReport.bonusVolume,5);
+    const inlineConfig={botToken:'sql-test',publicAppUrl:'https://example.com',botUsername:'obvious_test_bot'};
+    const shared=await ownedInlineResults({store,config:inlineConfig,userId:1,query:'Меценат'});assert.equal(shared.results.length,1);assert.equal(shared.results[0].type,'photo');
+    assert.equal((await ownedInlineResults({store,config:inlineConfig,userId:2})).results.length,0);
+    assert.equal((await ownedInlineResults({store,config:inlineConfig,userId:1,query:'%_'})).results.length,0);
     await store.init();assert.equal((await store.listPromos()).find(p=>p.id===promo.id).used,1);
     assert.equal((await store.listFreeOpeningGrants(1)).length,1);assert.equal(await store.getFreeOpenings(1),0);
   }finally{await db.close();}

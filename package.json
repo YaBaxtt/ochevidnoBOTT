@@ -11,12 +11,13 @@
     "demo": "node src/preview.js",
     "start": "node src/server.js",
     "test": "node --test",
-    "check": "node --check src/server.js && node --check src/app-store.js && node --check src/release-store.js && node --check src/release-api.js && node --check src/free-openings.js && node --check src/document-downloads.js && node --check src/card-engine.js && node --check src/bot.js && node --check src/bot-avatar.js && node --check src/deployment.js && node --check src/readiness.js && node --check src/broadcast.js && node --check src/engagement-api.js && node --check src/preview.js && node --check public/app.js && node --check public/admin.js && node --check public/brand.js && node --check public/certificate.js && node --check public/icons.js && node --check public/art.js && node --check public/art-gallery.js && node --check scripts/build-art.mjs && node --check scripts/build-avatars.mjs"
+    "check": "node --check src/server.js && node --check src/app-store.js && node --check src/release-store.js && node --check src/release-api.js && node --check src/free-openings.js && node --check src/document-downloads.js && node --check src/sharing.js && node --check src/share-renderer.js && node --check src/card-engine.js && node --check src/bot.js && node --check src/bot-avatar.js && node --check src/deployment.js && node --check src/readiness.js && node --check src/broadcast.js && node --check src/engagement-api.js && node --check src/preview.js && node --check public/app.js && node --check public/admin.js && node --check public/brand.js && node --check public/certificate.js && node --check public/certificate-design.js && node --check public/result-visuals.js && node --check public/visual-utils.js && node --check public/icons.js && node --check public/art.js && node --check public/art-gallery.js && node --check scripts/build-art.mjs && node --check scripts/build-avatars.mjs"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@ton/core": "^0.63.1",
     "@tonconnect/ui": "^5.0.1",
     "dotenv": "^16.6.1",
@@ -25,10 +26,10 @@
     "helmet": "^8.1.0",
     "pg": "^8.16.3",
     "pngjs": "^7.0.0",
+    "sharp": "^0.35.5",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.10",
-    "sharp": "^0.35.5"
+    "@electric-sql/pglite": "^0.5.10"
   }
 }
