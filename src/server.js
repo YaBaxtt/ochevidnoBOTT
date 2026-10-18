@@ -13,6 +13,8 @@ import { publicAppUrlFromEnv, appConnection } from './deployment.js';
 import { BRAND } from '../public/brand.js';
 import { registerEngagementApi } from './engagement-api.js';
 import { registerReleaseApi, startOwnerAlertWorker } from './release-api.js';
+import { registerFreeOpeningApi } from './free-openings.js';
+import { registerDocumentDownloads } from './document-downloads.js';
 import { publicPurchase, terms } from './product.js';
 import { startBroadcastWorker } from './broadcast.js';
 import { isTelegramMember, validateTelegramInitData } from './telegram-auth.js';
@@ -121,8 +123,8 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
 
   app.get('/api/bootstrap', requireActor, async (req, res, next) => {
     try {
-      const [profile, cards, tasks, leaderboard, purchases, entryAd, sales, vouchers] = await Promise.all([store.getProfile(req.actor.id), store.getCards(), store.getTasks(), store.publicLeaderboard(), store.recentPurchases(req.actor.id), store.getEntryCampaign(req.actor.id),store.getSalesSettings(),store.getVouchers(req.actor.id)]);
-      res.json({ mode: config.demo ? 'demo' : 'live', profile, cards: cards.map(cardForClient).filter(Boolean), tasks, leaderboard, purchases: purchases.map(publicPurchase), entryAd, sales, vouchers, walletEnabled: Boolean(config.publicAppUrl.startsWith('https://')), botUrl: config.botUsername ? `https://t.me/${config.botUsername}?startapp=profile` : null, shareUrl: config.botUsername ? `https://t.me/${config.botUsername}?startapp=home` : config.publicAppUrl || null, supportUrl: config.supportUrl, isAdmin: isAdmin(req.actor.id), termsUrl: '/api/terms' });
+      const [profile, cards, tasks, leaderboard, purchases, entryAd, sales, vouchers, freeOpenings] = await Promise.all([store.getProfile(req.actor.id), store.getCards(), store.getTasks(), store.publicLeaderboard(), store.recentPurchases(req.actor.id), store.getEntryCampaign(req.actor.id),store.getSalesSettings(),store.getVouchers(req.actor.id),store.getFreeOpenings(req.actor.id)]);
+      res.json({ mode: config.demo ? 'demo' : 'live', profile, cards: cards.map(cardForClient).filter(Boolean), tasks, leaderboard, purchases: purchases.map(publicPurchase), entryAd, sales, vouchers, freeOpenings, walletEnabled: Boolean(config.publicAppUrl.startsWith('https://')), botUrl: config.botUsername ? `https://t.me/${config.botUsername}?startapp=profile` : null, shareUrl: config.botUsername ? `https://t.me/${config.botUsername}?startapp=home` : config.publicAppUrl || null, supportUrl: config.supportUrl, isAdmin: isAdmin(req.actor.id), termsUrl: '/api/terms' });
     } catch (error) { next(error); }
   });
 
@@ -132,6 +134,7 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
     if (config.appSetupIssue) return res.status(503).json({ error: 'Мини-апп ещё настраивается. Новые покупки временно недоступны; поддержка и уже купленные карточки остаются доступны.' });
     try {
       const sales=await store.getSalesSettings();if(sales.paused)return res.status(409).json({error:sales.message});
+      if (req.body?.paymentMethod !== undefined && !['stars','bonus','voucher','free'].includes(req.body.paymentMethod)) return res.status(422).json({error:'Этот способ оплаты недоступен. Карточки оплачиваются Stars, бонусами или бесплатным открытием.'});
       const card = await store.getCard(req.params.cardId);
       if (!card || !card.enabled) return res.status(404).json({ error: 'Эта карточка сейчас недоступна.' });
       if(req.body?.expectedPriceStars!==undefined&&req.body.expectedPriceStars!==card.priceStars)return res.status(409).json({error:'Цена изменилась. Обновите карточку и проверьте новую сумму.'});
@@ -142,6 +145,10 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
       const applyCopy=(r,c)=>{if(c.copy?.answerText)r.detail=String(c.copy.answerText).replaceAll('{name}',r.recipient||'').slice(0,600);if(c.copy?.detailSuffix)r.detail+=` ${String(c.copy.detailSuffix).slice(0,180)}`;if(r.kind==='certificate'){r.documentTitle=c.title.replace(/^Сертификат: /,'').replace(/^Справка: /,'');r.citation=r.detail;}return r;};
       applyCopy(result,card);
       if(result.kind==='bundle')for(const item of result.items){const child=await store.getCard(item.cardId);if(child){item.title=child.title;applyCopy(item.result,child);}}
+      if (req.body?.paymentMethod === 'free') {
+        const paid = await store.createFreePurchase({userId:req.actor.id,cardId:card.id,amount:card.priceStars,answers:req.body.answers||{},result,requestId:req.body.requestId});
+        return res.json({mode:'free',purchase:publicPurchase(paid)});
+      }
       const purchase = await store.createPurchase({ userId: req.actor.id, cardId: card.id, amount: card.priceStars, answers: req.body?.answers || {}, result });
 
       if(req.body?.paymentMethod==='voucher')return res.json({mode:'voucher',purchase:publicPurchase(await store.payWithVoucher(purchase.id,req.actor.id))});
@@ -302,6 +309,8 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
 
   registerEngagementApi({ app, store, config, getTelegram, requireActor, requireAdmin });
   registerReleaseApi({ app, store, config, getTelegram, requireActor, requireAdmin });
+  registerFreeOpeningApi({ app, store, requireAdmin });
+  registerDocumentDownloads({ app, store, config, getTelegram, requireActor });
 
   app.use(express.static(publicDir, {
     index: 'index.html', maxAge: config.env === 'production' ? '1h' : 0, etag: true,

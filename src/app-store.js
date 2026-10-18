@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { MemoryStore, PostgresStore } from './store.js';
 import { DEFAULT_BOT_SETTINGS, resolveBotSettings } from './product.js';
 import { initReleaseSchema, installReleaseMethods, productGroup } from './release-store.js';
+import { initFreeOpeningSchema, installFreeOpeningMethods } from './free-openings.js';
 
 const uuid = () => crypto.randomUUID();
 const isoNow = () => new Date().toISOString();
@@ -126,6 +127,7 @@ export class PostgresAppStore extends PostgresStore {
       CREATE INDEX IF NOT EXISTS delivery_pending_idx ON campaign_deliveries(status,next_at);
     `);
     await initReleaseSchema(this);
+    await initFreeOpeningSchema(this);
   }
   async upsertUser(user) { return profile(await super.upsertUser(user)); }
   async getProfile(userId) {
@@ -214,6 +216,7 @@ export class PostgresAppStore extends PostgresStore {
 }
 
 installReleaseMethods(MemoryAppStore, PostgresAppStore);
+installFreeOpeningMethods(MemoryAppStore, PostgresAppStore);
 
 export function createAppStore({ databaseUrl, demo }) {
   if (!databaseUrl && !demo) throw new Error('DATABASE_URL обязателен вне демо-режима.');

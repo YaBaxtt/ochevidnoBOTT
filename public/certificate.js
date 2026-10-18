@@ -20,6 +20,14 @@ export function certificateSvg(r,sample=false) {
   <g stroke="url(#gold)" fill="none" stroke-width="2">${rays}<circle cx="610" cy="874" r="61" stroke-width="4"/><circle cx="610" cy="874" r="50" stroke-width="1"/></g><circle cx="610" cy="874" r="45" fill="#d7bd7d" opacity=".26"/><text x="610" y="863" font-family="Arial,sans-serif" font-size="10" letter-spacing="2" fill="#927034">ЗАВЕРЕНО</text><text x="610" y="897" font-size="36" fill="#927034">О</text>
   <text x="400" y="1005" font-family="Arial,sans-serif" font-size="11" letter-spacing="1.4" fill="#777666">№ ${esc(r.serial)} · ${esc(date)}</text><text x="400" y="1030" font-family="Arial,sans-serif" font-size="8.5" letter-spacing="1.1" fill="#8f8b7e">ШУТОЧНЫЙ ДОКУМЕНТ · НЕ ПРЕДОСТАВЛЯЕТ ПРАВ И ЛЬГОТ</text></g>${sample?'<text x="400" y="570" text-anchor="middle" transform="rotate(-27 400 570)" font-family="Arial" font-weight="bold" font-size="94" fill="#8c7749" opacity=".12">ОБРАЗЕЦ</text>':''}</svg>`;
 }
-export function downloadCertificate(result) {
-  const url=URL.createObjectURL(new Blob([certificateSvg(result)],{type:'image/svg+xml;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=`ochevidno-${result.serial}.svg`;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+export function downloadCertificate({url,fileName,telegram,onStatus=()=>{}}) {
+  if(telegram?.initData) {
+    if(!telegram.downloadFile||!telegram.isVersionAtLeast?.('8.0'))return false;
+    telegram.downloadFile({url,file_name:fileName},accepted=>onStatus(accepted?'Запрос на скачивание принят. Проверь папку «Загрузки».':'Скачивание отменено. Можно получить файл сообщением в боте.'));
+    return true;
+  }
+  const link=document.createElement('a');link.href=url;link.download=fileName;link.rel='noreferrer';
+  document.body.append(link);link.click();link.remove();
+  onStatus('Открываем файл для сохранения. Проверь загрузки браузера.');
+  return true;
 }

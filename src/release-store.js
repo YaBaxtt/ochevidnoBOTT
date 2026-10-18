@@ -127,8 +127,14 @@ export function installReleaseMethods(Memory, Postgres) {
         report = (await this.query(`SELECT c.id,c.title,c.price_stars AS "priceStars",c.enabled,(SELECT COUNT(*)::int FROM product_views v WHERE v.card_id=c.id) AS views,COUNT(p.id)::int AS orders,COUNT(p.id) FILTER(WHERE p.state IN ('paid','refunded'))::int AS purchases,COALESCE(SUM(p.amount) FILTER(WHERE p.state IN ('paid','refunded') AND p.payment_method='stars'),0)::bigint::text AS "receivedStars",COALESCE(SUM(p.amount) FILTER(WHERE p.state='refunded' AND p.payment_method='stars'),0)::bigint::text AS "refundedStars",COALESCE(SUM(p.amount) FILTER(WHERE p.state='paid' AND p.payment_method='bonus'),0)::bigint::text AS "bonusVolume",COALESCE(SUM(p.share_count) FILTER(WHERE p.state IN ('paid','refunded')),0)::int AS shares FROM cards c LEFT JOIN purchases p ON p.card_id=c.id GROUP BY c.id ORDER BY c.sort_order`)).rows.map(r => ({ ...r, group: productGroup(r.id), receivedStars: Number(r.receivedStars), refundedStars: Number(r.refundedStars), bonusVolume: Number(r.bonusVolume) }));
         totals = (await this.query(`SELECT (SELECT COUNT(*)::int FROM users) AS "totalUsers",(SELECT COUNT(*)::int FROM bot_starts) AS starts,(SELECT COUNT(DISTINCT telegram_id)::int FROM bot_starts) AS "uniqueStarts"`)).rows[0];
       }
+      const freeCounts = isPg(this)
+        ? (await this.query(`SELECT card_id AS "cardId",COUNT(*)::int AS quantity FROM purchases WHERE state='paid' AND payment_method='free' GROUP BY card_id`)).rows
+        : [...this.purchases.values()].filter(p=>p.state==='paid'&&p.paymentMethod==='free').map(p=>({cardId:p.cardId,quantity:1}));
+      const freeByCard = new Map();
+      for (const row of freeCounts) freeByCard.set(row.cardId,(freeByCard.get(row.cardId)||0)+row.quantity);
+      report=report.map(row=>({...row,freeOpenings:freeByCard.get(row.id)||0}));
       const sum = key => report.reduce((s,r)=>s+Number(r[key]),0);
-      return { ...totals, catalogCount: cards.length, bundleCount: report.filter(r=>r.group==='bundles'||getCardDefinition(r.id)?.kind==='bundle').length, purchases: sum('purchases'), receivedStars: sum('receivedStars'), refundedStars: sum('refundedStars'), netStars: sum('receivedStars')-sum('refundedStars'), bonusVolume: sum('bonusVolume'), products: report.map(r=>({ ...r, netStars:r.receivedStars-r.refundedStars, conversion: r.views ? Math.round(r.purchases/r.views*1000)/10 : null })) };
+      return { ...totals, catalogCount: cards.length, bundleCount: report.filter(r=>r.group==='bundles'||getCardDefinition(r.id)?.kind==='bundle').length, purchases: sum('purchases'), freeOpenings:sum('freeOpenings'), receivedStars: sum('receivedStars'), refundedStars: sum('refundedStars'), netStars: sum('receivedStars')-sum('refundedStars'), bonusVolume: sum('bonusVolume'), products: report.map(r=>({ ...r, netStars:r.receivedStars-r.refundedStars, conversion: r.views ? Math.round(r.purchases/r.views*1000)/10 : null })) };
     },
     async createPlacement(data) {
       const p = { ...data, id: uuid(), token: crypto.randomBytes(8).toString('hex'), createdAt: now() };

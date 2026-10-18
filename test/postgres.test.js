@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { PostgresAppStore } from '../src/app-store.js';
 import { processDelivery } from '../src/broadcast.js';
@@ -69,6 +70,24 @@ test('PostgreSQL schema, bonus ledger, ad queue and delivery SQL work together',
     store.ownerIds=new Set(['2']);await store.createTicket({userId:1,message:'SQL: проверьте оплату'});assert.equal((await store.ownTickets(2)).length,0);assert.equal((await store.ownTickets(1)).length,1);
     const alerts=[];await processOwnerAlert({store,telegram:{sendMessage:async(id,text)=>alerts.push({id,text})}});assert.equal(alerts[0].id,'2');assert.match(alerts[0].text,/SQL/);
     const problems=await store.listProblems();await store.resolveProblem(problems[0].id);assert.equal((await store.listProblems())[0].state,'resolved');
+    const grantRequest=crypto.randomUUID();
+    const grantArgs={userId:'1',adminId:'2',quantity:2,note:'SQL: тестовый доступ',requestId:grantRequest};
+    await store.grantFreeOpenings(grantArgs);await store.grantFreeOpenings(grantArgs);
+    assert.equal(await store.getFreeOpenings(1),2);assert.equal((await store.listFreeOpeningGrants(1)).length,1);
+    assert.equal((await store.query(`SELECT COUNT(*)::int AS total FROM admin_audit WHERE action='free-openings.grant'`)).rows[0].total,1);
+    await assert.rejects(()=>store.grantFreeOpenings({...grantArgs,quantity:3}),/запрос уже использован/);
+    assert.equal((await store.findFreeOpeningUser('1')).id,'1');
+    const freeArgs={userId:'1',cardId:'patron-of-obvious',amount:1000,answers:{name:'Тест'},result:makeResult('patron-of-obvious',{name:'Тест'}),requestId:crypto.randomUUID()};
+    const free=await store.createFreePurchase(freeArgs);assert.equal(free.paymentMethod,'free');assert.equal(free.result.kind,'certificate');
+    await store.createFreePurchase(freeArgs);assert.equal(await store.getFreeOpenings(1),1);
+    await assert.rejects(()=>store.createFreePurchase({...freeArgs,userId:'2'}),/запрос уже использован/);
+    const freeBundle={userId:'1',cardId:'bundle-office',amount:35,answers:{name:'Тест'},result:makeResult('bundle-office',{name:'Тест'}),requestId:crypto.randomUUID()};
+    await store.createFreePurchase(freeBundle);assert.equal(await store.getFreeOpenings(1),0);
+    const rejectedId=crypto.randomUUID();await assert.rejects(()=>store.createFreePurchase({...freeArgs,requestId:rejectedId}),/закончились/);
+    assert.equal(await store.getPurchase(rejectedId,1),null);
+    assert.equal((await store.getProfile(1)).starsSpent,20);
+    const freeReport=await store.releaseReport();assert.equal(freeReport.freeOpenings,2);assert.equal(freeReport.receivedStars,20);assert.equal(freeReport.bonusVolume,5);
     await store.init();assert.equal((await store.listPromos()).find(p=>p.id===promo.id).used,1);
+    assert.equal((await store.listFreeOpeningGrants(1)).length,1);assert.equal(await store.getFreeOpenings(1),0);
   }finally{await db.close();}
 });

@@ -19,7 +19,7 @@ export function botMenu(config, text = 'Открыть «Очевидно»', ta
 
 export const ABOUT_TEXT = '🃏 «Очевидно»\nСерьёзный подход к несерьёзным вопросам.\n\nОчевидные ответы, именные шуточные грамоты, наборы и частная коллекция «Для богатых». Красиво оформить абсурд — тоже искусство.\n\n🎓 Грамоты созданы для развлечения: это не настоящие дипломы, медицинские справки или предсказания. Здесь нет ставок, выигрышей и обещаний заработка.\n\nЦена видна до покупки. Оплата — в Telegram Stars, готовые результаты — в твоей коллекции. Бонусы за задания и промокоды можно потратить на карточки; вывести их нельзя.\n\nПравила: /terms\nВопрос по покупке: /paysupport';
 
-export const HELP_TEXT = '🧭 Как всё работает\n\n1. Открой мини-апп и выбери карточку.\n2. Заполни вопросы и проверь цену.\n3. Подтверди покупку в окне Telegram Stars.\n4. Забери результат в коллекции — он останется там и после закрытия приложения.\n\n🎟 Есть промокод? Нажми «Ввести промокод» или отправь /promo КОД. Задания дают внутренние бонусы, не Stars для вывода.\n\nБыстрый доступ\n/cards — каталог\n/collection — купленные карточки\n/bundles — наборы грамот\n/premium — для богатых\n/tasks — задания и бонусы\n/profile — профиль и TON-кошелёк\n\nЕсли что-то пошло не так\n/paysupport — помощь с покупкой и возвратом\n/about — о проекте\n/terms — правила\n/cancel — отменить ввод\n/stop — отключить рекламные сообщения\n/start — вернуться в начало и включить сообщения\n\nМини-апп нужно открывать кнопкой в этом боте. Если видишь старый экран, закрой его и отправь /start ещё раз. Не плати повторно, если покупка задержалась: сначала обратись в поддержку.';
+export const HELP_TEXT = '🧭 Как всё работает\n\n1. Открой мини-апп и выбери карточку.\n2. Заполни вопросы и проверь цену.\n3. Подтверди покупку в окне Telegram Stars.\n4. Забери результат в коллекции — он останется там и после закрытия приложения.\n\n🎟 Есть промокод? Нажми «Ввести промокод» или отправь /promo КОД. Задания дают внутренние бонусы, не Stars для вывода.\n\nБыстрый доступ\n/cards — каталог\n/collection — купленные карточки\n/bundles — наборы грамот\n/premium — для богатых\n/tasks — задания и бонусы\n/profile — профиль и Gram-кошелёк\n\nЕсли что-то пошло не так\n/paysupport — помощь с покупкой и возвратом\n/about — о проекте\n/terms — правила\n/cancel — отменить ввод\n/stop — отключить рекламные сообщения\n/start — вернуться в начало и включить сообщения\n\nМини-апп нужно открывать кнопкой в этом боте. Если видишь старый экран, закрой его и отправь /start ещё раз. Не плати повторно, если покупка задержалась: сначала обратись в поддержку.';
 
 export function createBot({ store, config }) {
   if (!config.botToken || config.demo) return null;
@@ -67,7 +67,7 @@ export function createBot({ store, config }) {
   bot.action('enter_promo',async ctx=>{await ctx.answerCbQuery();waitFor(promoWaiting,ctx.from.id);await ctx.reply('🎟 Пришли промокод одним сообщением.\n\nОтмена: /cancel. Ввод доступен 5 минут.');});
   bot.command('cancel',ctx=>{promoWaiting.delete(String(ctx.from.id));supportWaiting.delete(String(ctx.from.id));return ctx.reply('Ввод отменён. Возвращаемся к очевидному.',menu());});
   bot.command('tasks', (ctx) => ctx.reply('🎯 Задания и бонусы\n\nВыполни задание, нажми «Проверить» и получи бонусы на карточки. Бонусы не являются Stars или TON и не выводятся.', menu('Открыть задания', 'tasks')));
-  bot.command('profile', (ctx) => ctx.reply('👤 Всё твоё — здесь.\n\nПокупки, бонусы, TON-кошелёк и настройки сообщений. Кошелёк остаётся под твоим контролем: seed-фразу мы не спрашиваем.', menu('Мой профиль', 'profile')));
+  bot.command('profile', (ctx) => ctx.reply('👤 Всё твоё — здесь.\n\nПокупки, бонусы, Gram-кошелёк и настройки сообщений. Кошелёк остаётся под твоим контролем: seed-фразу мы не спрашиваем.', menu('Мой профиль', 'profile')));
   bot.command('collection', async (ctx) => {
     const items = (await store.recentPurchases(ctx.from.id)).filter((p) => p.state === 'paid').slice(0, 5).map(publicPurchase);
     const text = items.length ? `🗂 Твоя коллекция\n\n${items.map((p) => `• ${p.title || p.cardId}: ${p.result.headline}`).join('\n')}\n\nВсе покупки и скачивание грамот — в мини-аппе.` : '🗂 Пока чистый лист.\n\nКупленные карточки и грамоты появятся здесь. Начни с той, которая слишком очевидна, чтобы пройти мимо.';
@@ -147,7 +147,7 @@ export async function configureBot(bot, config, settings) {
   const commands = [
     { command: 'start', description: 'Открыть «Очевидно»' }, { command: 'cards', description: 'Каталог карточек' },
     { command: 'collection', description: 'Моя коллекция' }, { command: 'tasks', description: 'Задания и бонусы' },
-    { command: 'profile', description: 'Профиль и TON-кошелёк' }, { command: 'help', description: 'Как всё работает' },
+    { command: 'profile', description: 'Профиль и Gram-кошелёк' }, { command: 'help', description: 'Как всё работает' },
     { command: 'promo', description: 'Активировать промокод' }, { command: 'bundles', description: 'Наборы грамот' },
     { command: 'premium', description: 'Частная коллекция · для богатых' }, { command: 'about', description: 'О проекте' },
     { command: 'terms', description: 'Правила' }, { command: 'paysupport', description: 'Помощь по платежам' },
