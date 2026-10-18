@@ -8,6 +8,9 @@ import { rateLimit } from 'express-rate-limit';
 import { getCardDefinition, makeResult } from './card-engine.js';
 import { createAppStore } from './app-store.js';
 import { createBot, configureBot } from './bot.js';
+import { syncBotAvatar } from './bot-avatar.js';
+import { publicAppUrlFromEnv, appConnection } from './deployment.js';
+import { BRAND } from '../public/brand.js';
 import { registerEngagementApi } from './engagement-api.js';
 import { registerReleaseApi, startOwnerAlertWorker } from './release-api.js';
 import { publicPurchase, terms } from './product.js';
@@ -21,7 +24,7 @@ const defaultConfig = {
   env: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT || 3000),
   botToken: process.env.BOT_TOKEN || '',
-  publicAppUrl: (process.env.PUBLIC_APP_URL || '').replace(/\/$/, ''),
+  publicAppUrl: publicAppUrlFromEnv(),
   databaseUrl: process.env.DATABASE_URL || '',
   supportUrl: process.env.SUPPORT_URL || '',
   toncenterApiKey: process.env.TONCENTER_API_KEY || '',
@@ -110,6 +113,11 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
   }];
 
   app.get('/health', (_req, res) => res.json({ ok: true, mode: config.demo ? 'demo' : 'telegram' }));
+  app.get('/api/app-info', (_req, res) => res.json({
+    name: 'Очевидно',
+    botUrl: config.botUsername ? `https://t.me/${config.botUsername}` : null,
+    avatarUrl: BRAND.botAvatar
+  }));
 
   app.get('/api/bootstrap', requireActor, async (req, res, next) => {
     try {
@@ -121,6 +129,7 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
   app.get('/api/terms', (_req, res) => res.type('text/plain; charset=utf-8').send(terms(config.supportUrl || 'команду /paysupport')));
 
   app.post('/api/cards/:cardId/checkout', requireActor, checkoutLimit, async (req, res, next) => {
+    if (config.appSetupIssue) return res.status(503).json({ error: 'Мини-апп ещё настраивается. Новые покупки временно недоступны; поддержка и уже купленные карточки остаются доступны.' });
     try {
       const sales=await store.getSalesSettings();if(sales.paused)return res.status(409).json({error:sales.message});
       const card = await store.getCard(req.params.cardId);
@@ -294,7 +303,16 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
   registerEngagementApi({ app, store, config, getTelegram, requireActor, requireAdmin });
   registerReleaseApi({ app, store, config, getTelegram, requireActor, requireAdmin });
 
-  app.use(express.static(publicDir, { index: 'index.html', maxAge: config.env === 'production' ? '1h' : 0, etag: true }));
+  app.use(express.static(publicDir, {
+    index: 'index.html', maxAge: config.env === 'production' ? '1h' : 0, etag: true,
+    setHeaders: (res, filePath) => {
+      if (path.extname(filePath) === '.html') res.setHeader('Cache-Control', 'no-cache');
+      const assetPath = filePath.replace(/\\/g, '/');
+      const versionedAvatar = assetPath.includes('/assets/avatars/') && /-v\d+(?:-\d+)?\.(?:jpg|webp)$/.test(assetPath);
+      const versionedCover = assetPath.includes('/assets/art-v3/') && assetPath.endsWith('.webp');
+      if (config.env === 'production' && (versionedAvatar || versionedCover)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }));
   app.use((req, res) => res.status(404).json({ error: `Не найдено: ${req.method} ${req.path}` }));
   app.use((error, _req, res, _next) => {
     const message = error instanceof Error ? error.message : 'Неизвестная ошибка.';
@@ -307,12 +325,17 @@ export function createApp({ store, getTelegram, config = defaultConfig }) {
 
 export async function start(config = defaultConfig) {
   if([...config.adminIds].some(id=>!/^\d+$/.test(id)||!Number.isSafeInteger(Number(id))||Number(id)<=0))throw new Error('ADMIN_TELEGRAM_IDS должен содержать положительные числовые Telegram ID через запятую.');
-  if (!config.demo && (!config.botToken || !config.publicAppUrl.startsWith('https://') || !config.databaseUrl || !config.adminIds.size)) {
-    throw new Error('Для запуска нужны BOT_TOKEN, HTTPS PUBLIC_APP_URL, DATABASE_URL и ADMIN_TELEGRAM_IDS. Для локального просмотра: ALLOW_DEMO=1.');
+  if (!config.demo) Object.assign(config, appConnection(config.publicAppUrl));
+  if (!config.demo && (!config.botToken || !config.databaseUrl || !config.adminIds.size)) {
+    throw new Error('Для запуска нужны BOT_TOKEN, DATABASE_URL и ADMIN_TELEGRAM_IDS. Для мини-аппа также настройте HTTPS PUBLIC_APP_URL. Для локального просмотра: ALLOW_DEMO=1.');
   }
   const store = createAppStore({ databaseUrl: config.databaseUrl, demo: config.demo });
   await store.init();
   const bot = createBot({ store, config });
+  if (config.appSetupIssue) {
+    console.warn('Мини-апп не подключён. Настройте PUBLIC_APP_URL или публичный домен Railway. Бот и поддержка продолжают работать.');
+    await store.recordProblem({ title: 'Не подключён адрес мини-аппа', body: config.appSetupIssue, dedupeKey: 'public-app-url' }).catch(() => {});
+  }
   const app = createApp({ store, getTelegram: () => bot?.telegram ?? null, config });
   const server = app.listen(config.port, config.demo?'127.0.0.1':'0.0.0.0', () => console.log(`Очевидно: http://127.0.0.1:${config.port} (${config.demo ? 'demo — без реальных списаний' : 'Telegram'})`));
   let stopWorker = () => {};
@@ -321,6 +344,10 @@ export async function start(config = defaultConfig) {
     bot.botInfo = await bot.telegram.getMe();
     config.botUsername = bot.botInfo.username;
     await configureBot(bot, config, await store.getBotSettings());
+    try { await syncBotAvatar({ store, botToken: config.botToken }); } catch {
+      console.warn('Аватарка бота не обновлена. При необходимости установите её через BotFather → /setuserpic.');
+      await store.recordProblem({ title: 'Не удалось обновить аватарку бота', body: `Бот продолжает работать. Проверьте доступ к Telegram API или установите public${BRAND.botAvatar} через BotFather → /setuserpic.`, dedupeKey: `bot-avatar-v${BRAND.avatarVersion}` }).catch(() => {});
+    }
     stopWorker = startBroadcastWorker({ store, telegram: bot.telegram });
     stopAlerts = startOwnerAlertWorker({store,telegram:bot.telegram});
     // Telegraf launch runs until polling stops; register all settings before starting it.

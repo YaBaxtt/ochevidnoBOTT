@@ -6,11 +6,12 @@
   "description": "Telegram Mini App with paid comedy cards, a controlled task system and an admin panel.",
   "scripts": {
     "assets:build": "node scripts/build-art.mjs",
+    "avatars:build": "node scripts/build-avatars.mjs",
     "dev": "node --watch src/server.js",
     "demo": "node src/preview.js",
     "start": "node src/server.js",
     "test": "node --test",
-    "check": "node --check src/server.js && node --check src/app-store.js && node --check src/release-store.js && node --check src/release-api.js && node --check src/card-engine.js && node --check src/bot.js && node --check src/broadcast.js && node --check src/engagement-api.js && node --check src/preview.js && node --check public/app.js && node --check public/admin.js && node --check public/certificate.js && node --check public/icons.js && node --check public/art.js && node --check public/art-gallery.js && node --check scripts/build-art.mjs"
+    "check": "node --check src/server.js && node --check src/app-store.js && node --check src/release-store.js && node --check src/release-api.js && node --check src/card-engine.js && node --check src/bot.js && node --check src/bot-avatar.js && node --check src/deployment.js && node --check src/readiness.js && node --check src/broadcast.js && node --check src/engagement-api.js && node --check src/preview.js && node --check public/app.js && node --check public/admin.js && node --check public/brand.js && node --check public/certificate.js && node --check public/icons.js && node --check public/art.js && node --check public/art-gallery.js && node --check scripts/build-art.mjs && node --check scripts/build-avatars.mjs"
   },
   "engines": {
     "node": ">=22"

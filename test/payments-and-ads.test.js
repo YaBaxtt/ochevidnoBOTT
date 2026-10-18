@@ -6,6 +6,7 @@ import { MemoryAppStore } from '../src/app-store.js';
 import { createApp } from '../src/server.js';
 import { publicPurchase, validPayment } from '../src/product.js';
 import { processDelivery } from '../src/broadcast.js';
+import { BRAND } from '../public/brand.js';
 
 const signed = (id, token='test-token') => {
   const params = new URLSearchParams({ user: JSON.stringify({id,first_name:'Тест'}), auth_date: String(Math.floor(Date.now()/1000)) });
@@ -15,9 +16,9 @@ const signed = (id, token='test-token') => {
   return params.toString();
 };
 
-async function fixture(demo) {
+async function fixture(demo, env = 'test', overrides = {}) {
   const store = new MemoryAppStore();
-  const config = { demo, env:'test', botToken:'test-token', publicAppUrl:'https://example.com',adminIds:new Set(['1']),supportUrl:'https://t.me/test_support' };
+  const config = { demo, env, botToken:'test-token', publicAppUrl:'https://example.com', botUsername:'obvious_test_bot',adminIds:new Set(['1']),supportUrl:'https://t.me/test_support', ...overrides };
   const telegram = {createInvoiceLink:async()=> 'https://t.me/$test_invoice'};
   const app = createApp({store,config,getTelegram:()=>demo?null:telegram});
   const server = app.listen(0,'127.0.0.1');await once(server,'listening');
@@ -26,8 +27,44 @@ async function fixture(demo) {
     const response=await fetch(base+url,{method,headers:{'Content-Type':'application/json',...(demo?{'X-Demo-User':String(user)}:{'X-Telegram-Init-Data':signed(user)}),...headers},...(body?{body:JSON.stringify(body)}:{})});
     return {status:response.status,body:await response.json()};
   };
-  return {store,request,close:()=>new Promise((resolve)=>server.close(resolve))};
+  return {store,request,base,close:()=>new Promise((resolve)=>server.close(resolve))};
 }
+
+test('public app info helps browser visitors open Telegram without disclosing runtime configuration', async () => {
+  const f = await fixture(false);
+  try {
+    const result = await f.request('/api/app-info', { headers: { 'X-Telegram-Init-Data': '' } });
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body, { name: 'Очевидно', botUrl: 'https://t.me/obvious_test_bot', avatarUrl: BRAND.botAvatar });
+    assert.doesNotMatch(JSON.stringify(result.body), /test-token|DATABASE|adminIds/);
+    const html = await fetch(f.base + '/');
+    assert.equal(html.headers.get('cache-control'), 'no-cache');
+    assert.match(await html.text(), /app\.js\?v=5/);
+    const avatar = await fetch(f.base + result.body.avatarUrl);
+    assert.equal(avatar.status, 200);
+    assert.match(avatar.headers.get('content-type'), /image\/jpeg/);
+  } finally { await f.close(); }
+});
+
+test('versioned art is cached long-term while entry HTML revalidates and readiness stays owner-only', async () => {
+  const f = await fixture(false, 'production');
+  try {
+    const avatar = await fetch(f.base + BRAND.botAvatar);
+    assert.match(avatar.headers.get('cache-control'), /max-age=31536000, immutable/);
+    const again = await fetch(f.base + BRAND.botAvatar, { cache: 'force-cache', headers: { 'If-None-Match': avatar.headers.get('etag') } });
+    assert.equal(again.status, 304);
+    const cover = await fetch(f.base + '/assets/art-v3/birth-year-360.webp');
+    assert.match(cover.headers.get('cache-control'), /immutable/);
+    const html = await fetch(f.base + '/');
+    assert.equal(html.headers.get('cache-control'), 'no-cache');
+    assert.equal((await f.request('/api/admin/readiness', { user: 2 })).status, 403);
+    const result = await f.request('/api/admin/readiness');
+    assert.equal(result.status, 200);
+    assert.equal(result.body.appUrl, 'https://example.com');
+    assert.equal(result.body.checks.find(item => item.key === 'payment').state, 'info');
+    assert.doesNotMatch(JSON.stringify(result.body), /test-token|DATABASE_URL|adminIds/);
+  } finally { await f.close(); }
+});
 
 test('demo purchase stays locked until explicit confirmation; cancel cannot reveal the answer',async()=>{
   const f=await fixture(true);
@@ -42,6 +79,19 @@ test('demo purchase stays locked until explicit confirmation; cancel cannot reve
     await f.request(`/api/demo/purchases/${id}/confirm`,{body:{}});
     const profile=await f.store.getProfile(1);assert.equal(profile.cardCount,1);assert.equal(profile.starsSpent,5);
   }finally{await f.close();}
+});
+
+test('setup mode blocks new charges without hiding already paid purchases or support', async () => {
+  const f = await fixture(false, 'test', { publicAppUrl: '', appSetupIssue: 'PUBLIC_APP_URL' });
+  try {
+    assert.equal((await f.request('/api/bootstrap')).status, 200);
+    const purchase = await f.store.createPurchase({ userId: 1, cardId: 'sum-two', amount: 5, answers: {a:1,b:1}, result: { headline:'2', detail:'1 + 1' } });
+    await f.store.settlePurchase({ payload:purchase.payload, chargeId:'already-paid' });
+    const checkout = await f.request('/api/cards/sum-two/checkout', { body: { answers:{a:1,b:1}, termsAccepted:true } });
+    assert.equal(checkout.status, 503);
+    assert.equal((await f.request(`/api/purchases/${purchase.id}`)).body.purchase.result.headline, '2');
+    assert.equal((await f.request('/api/support', { body: { message:'Не открывается мини-апп' } })).status, 201);
+  } finally { await f.close(); }
 });
 
 test('live invoice ignores forged prices and browser cannot mark it paid',async()=>{

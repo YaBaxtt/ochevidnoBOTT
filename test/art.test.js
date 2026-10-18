@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { DEFAULT_CARDS } from '../src/card-engine.js';
 import { ART_SLUGS, CARD_ART, artworkSlug, artImage } from '../public/art.js';
+import { BRAND } from '../public/brand.js';
 
 test('every catalog product has an existing optimized illustration; main five and premium five are distinct',async()=>{
   const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../public/assets/art-v3');
@@ -22,4 +23,22 @@ test('every catalog product has an existing optimized illustration; main five an
   assert.equal((await sharp(path.join(root,'hero-wide.webp')).metadata()).width,1440);
   assert.match(artImage('birth-year'),/loading="lazy"/);assert.match(artImage('birth-year',{eager:true}),/fetchpriority="high"/);
   assert.doesNotMatch(artImage('../../.env'),/\.env/);
+});
+
+test('both identity avatars fit Telegram and lightweight UI use, with originals and exact prompts retained', async () => {
+  const publicRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
+  for (const role of ['bot', 'manager']) {
+    const avatar = path.join(publicRoot, role === 'bot' ? BRAND.botAvatar : BRAND.managerAvatar);
+    const small = path.join(publicRoot, role === 'bot' ? BRAND.smallAvatar : BRAND.smallManagerAvatar);
+    const image = await sharp(avatar).metadata();
+    assert.equal(image.format, 'jpeg'); assert.equal(image.width, 640); assert.equal(image.height, 640);
+    assert.ok((await fs.stat(avatar)).size < 40000);
+    const icon = await sharp(small).metadata();
+    assert.equal(icon.width, 128); assert.equal(icon.height, 128); assert.equal(icon.format, 'webp');
+    assert.ok((await fs.stat(small)).size < 4000);
+    const source = await sharp(path.join(publicRoot, `assets/avatars/${role}-avatar-source-v${BRAND.avatarVersion}.png`)).metadata();
+    assert.ok(source.width >= 1000); assert.equal(source.width, source.height);
+  }
+  const prompts = await fs.readFile(path.join(publicRoot, 'assets/avatars/prompts-v2.md'), 'utf8');
+  assert.match(prompts, /imagegen/); assert.match(prompts, /ПОДДЕРЖКА/);
 });

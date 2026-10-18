@@ -5,6 +5,7 @@ import { PostgresAppStore } from '../src/app-store.js';
 import { processDelivery } from '../src/broadcast.js';
 import { makeResult } from '../src/card-engine.js';
 import { processOwnerAlert } from '../src/release-api.js';
+import { DEFAULT_BOT_SETTINGS, LEGACY_BOT_SETTINGS } from '../src/product.js';
 
 test('PostgreSQL schema, bonus ledger, ad queue and delivery SQL work together',async()=>{
   const db=new PGlite();
@@ -42,8 +43,11 @@ test('PostgreSQL schema, bonus ledger, ad queue and delivery SQL work together',
     assert.equal(rows.find((r)=>r.id===campaign.id).sent,1);
     assert.equal(rows.find((r)=>r.id===campaign.id).status,'completed');
     assert.equal(rows.find((r)=>r.id===ad.id).clicks,1);
-    await store.updateBotSettings({welcome:'Привет, {name}!',buttonText:'Вперёд'});
+    await store.updateBotSettings(LEGACY_BOT_SETTINGS);
+    assert.equal((await store.getBotSettings()).welcome,DEFAULT_BOT_SETTINGS.welcome);
+    await store.updateBotSettings({welcome:'Привет, {name}!',buttonText:'Вперёд',shortDescription:'Моё описание профиля'});
     assert.equal((await store.getBotSettings()).welcome,'Привет, {name}!');
+    assert.equal((await store.getBotSettings()).shortDescription,'Моё описание профиля');
     await store.recordStart(1);await store.recordStart(1);await store.recordView('rest-license',1);await store.recordView('rest-license',1);
     const promo=await store.createPromo({code:'PGCARD',kind:'card',cardId:'bundle-office',bonus:0,usageLimit:1,expiresAt:null});
     await store.redeemPromo('PGCARD',1);await assert.rejects(()=>store.redeemPromo('PGCARD',2),/Промокод/);

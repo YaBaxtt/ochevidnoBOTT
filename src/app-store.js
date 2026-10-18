@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { MemoryStore, PostgresStore } from './store.js';
-import { DEFAULT_BOT_SETTINGS } from './product.js';
+import { DEFAULT_BOT_SETTINGS, resolveBotSettings } from './product.js';
 import { initReleaseSchema, installReleaseMethods, productGroup } from './release-store.js';
 
 const uuid = () => crypto.randomUUID();
@@ -42,7 +42,7 @@ export class MemoryAppStore extends MemoryStore {
   }
   async incrementShare(purchaseId, userId) { const purchase = this.purchases.get(purchaseId); if (!purchase || purchase.userId !== String(userId) || purchase.state !== 'paid') return null; return ++purchase.shareCount; }
   async recentPurchases(userId) { return [...this.purchases.values()].filter((item) => item.userId === String(userId)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,30).map((item)=>({...item,title:this.cards.get(item.cardId)?.title||item.cardId})); }
-  async getBotSettings() { return { ...this.settings }; }
+  async getBotSettings() { return resolveBotSettings(this.settings); }
   async updateBotSettings(patch) { Object.assign(this.settings, patch); return this.getBotSettings(); }
   eligibleUsers(campaign) {
     const users = [...this.users.values()].filter((user) => user.botStarted && user.notifications !== false && (campaign.audience !== 'recent' || Date.now() - new Date(user.lastSeenAt).getTime() < 7 * 86_400_000) && (!campaign.interest || campaign.interest === 'all' || [...this.purchases.values()].some(p=>p.userId===user.id&&p.state==='paid'&&productGroup(p.cardId)===campaign.interest))).sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
@@ -155,7 +155,7 @@ export class PostgresAppStore extends PostgresStore {
       return this.getPurchase(purchaseId, userId);
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   }
-  async getBotSettings() { const result = await this.query(`SELECT value FROM app_settings WHERE key='bot'`); return { ...DEFAULT_BOT_SETTINGS, ...(result.rows[0]?.value || {}) }; }
+  async getBotSettings() { const result = await this.query(`SELECT value FROM app_settings WHERE key='bot'`); return resolveBotSettings(result.rows[0]?.value); }
   async updateBotSettings(patch) { const settings = { ...await this.getBotSettings(), ...patch }; await this.query(`INSERT INTO app_settings (key,value) VALUES ('bot',$1) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`, [JSON.stringify(settings)]); return settings; }
   async campaignAudience(campaign) {
     const ids = (await this.getCards({includeDisabled:true})).filter(c=>productGroup(c.id)===campaign.interest).map(c=>c.id);

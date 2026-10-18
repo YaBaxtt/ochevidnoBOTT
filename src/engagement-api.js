@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { configureBot } from './bot.js';
 import { validLink } from './product.js';
+import { readinessSnapshot } from './readiness.js';
 
 const text = (value, name, max, optional = false) => {
   const result = String(value ?? '').trim();
@@ -72,8 +73,12 @@ export function registerEngagementApi({ app, store, config, getTelegram, require
     res.json({ ok: await store.recordAdEvent(req.params.id, req.actor.id, req.body.event === 'click') });
   });
   app.get('/api/admin/bot', ...requireAdmin, async (_req, res) => res.json({ settings: await store.getBotSettings(), connected: Boolean(getTelegram()), reachableUsers: await store.campaignAudience({ audience: 'all' }) }));
+  app.get('/api/admin/readiness', ...requireAdmin, async (_req, res) => {
+    res.json(readinessSnapshot({ config, settings: await store.getBotSettings(), telegramConnected: Boolean(getTelegram()) }));
+  });
   app.patch('/api/admin/bot', ...requireAdmin, async (req, res) => {
     const patch = { welcome: text(req.body.welcome, 'приветствие', 3000), buttonText: text(req.body.buttonText, 'кнопка', 40), description: text(req.body.description, 'описание бота', 512) };
+    if (req.body.shortDescription !== undefined) patch.shortDescription = text(req.body.shortDescription, 'краткое описание', 120);
     const settings = await store.updateBotSettings(patch);
     // Persisted greeting is used immediately; Telegram metadata is retried on next boot if the API is temporarily down.
     let synced = false;
